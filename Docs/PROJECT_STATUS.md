@@ -33,7 +33,7 @@ Primary MVP:
 
 Status: Not Started
 
-(Phase 1 — Repository Setup: ✅ Complete, except creating the remote GitHub repository, which requires the owner to run `gh repo create` / push. Local git repository and initial commit are done.)
+(Phase 1 — Repository Setup: ✅ Fully complete. Pushed to https://github.com/negiakki/StudentOS.git on `main`.)
 
 ---
 
@@ -49,7 +49,7 @@ Status
 
 Tasks
 
-* ⬜ Create GitHub Repository — *deferred: needs owner (gh not installed here)*
+* ✅ Create GitHub Repository — pushed to github.com/negiakki/StudentOS (`main`)
 * ✅ Create Frontend — Next.js 15 (App Router) + TS + Tailwind, builds clean
 * ✅ Create Backend — FastAPI app boots, `/health` verified
 * ✅ Configure Folder Structure — per System Architecture §4
