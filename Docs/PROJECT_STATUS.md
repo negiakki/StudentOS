@@ -29,11 +29,12 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 2 — Authentication
+🟢 Phase 3 — Database
 
 Status: Not Started
 
-(Phase 1 — Repository Setup: ✅ Fully complete. Pushed to https://github.com/negiakki/StudentOS.git on `main`.)
+(Phase 1 — Repository Setup: ✅ Complete. Phase 2 — Authentication: ✅ Complete,
+pending two Supabase-dashboard config steps by the owner — see Phase 2 notes.)
 
 ---
 
@@ -64,17 +65,23 @@ Authentication
 
 Status
 
-⬜ Not Started
+✅ Complete (2 owner dashboard steps pending — see notes)
 
 Tasks
 
-* Configure Supabase
-* Google Authentication
-* Email & Password Authentication
-* Email Verification
-* Forgot Password
-* Protected Routes
-* Persistent Sessions
+* ✅ Configure Supabase — @supabase/ssr browser/server/middleware clients (latest API)
+* ✅ Google Authentication — signInWithOAuth (PKCE code flow via /auth/callback)
+* ✅ Email & Password Authentication — signInWithPassword + signUp
+* ✅ Email Verification — /auth/callback (code) + /auth/confirm (token_hash) routes
+* ✅ Forgot Password — resetPasswordForEmail + /reset-password (updateUser)
+* ✅ Protected Routes — root middleware + guarded (protected) layout
+* ✅ Persistent Sessions — cookie-based token refresh in middleware
+* ✅ Backend JWT validation — Supabase ES256 via JWKS (+ HS256 fallback), get_current_user, /auth/me
+
+Owner dashboard steps still required to exercise live:
+* Enable + configure the **Google** provider in Supabase (client id/secret).
+* Add redirect URLs to Supabase Auth allowlist: `http://localhost:3000/auth/callback`
+  (and the production origin when deployed).
 
 ---
 
@@ -277,5 +284,11 @@ Version 1.0
 * Architecture frozen.
 * Development ready.
 * Phase 1 (Repository Setup) implemented: backend + frontend scaffolds, folder
-  structure per architecture, docs, local git repo + initial commit. Remote
-  GitHub repository creation deferred to the owner.
+  structure per architecture, docs, local git repo + initial commit. Pushed to
+  github.com/negiakki/StudentOS.
+* Phase 2 (Authentication) implemented: Supabase Auth via current @supabase/ssr
+  APIs (browser/server/middleware clients, PKCE), email/password + Google OAuth,
+  email verification, forgot/reset password, cookie-based persistent sessions,
+  middleware-protected routes. Backend verifies Supabase ES256 JWTs via JWKS
+  (HS256 fallback) with get_current_user + /auth/me. Verified at runtime:
+  protected routes redirect unauthenticated users; backend rejects invalid tokens.

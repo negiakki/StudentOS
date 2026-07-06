@@ -31,9 +31,13 @@ class Settings(BaseSettings):
     # --- Database (Supabase Postgres); wired up in Phase 3 ---
     database_url: str = ""
 
-    # --- Supabase Auth; wired up in Phase 2 ---
+    # --- Supabase Auth ---
     supabase_url: str = ""
+    # Legacy HS256 shared secret. Optional: only used as a fallback when the
+    # project still signs JWTs symmetrically. Asymmetric (JWKS) is preferred.
     supabase_jwt_secret: str = ""
+    # Expected audience claim on Supabase access tokens.
+    supabase_jwt_audience: str = "authenticated"
 
     # --- AI provider layer; wired up in Phase 9 ---
     ai_provider: str = "gemini"
@@ -43,6 +47,21 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def supabase_auth_url(self) -> str:
+        """Base URL of the Supabase Auth (GoTrue) service."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
+
+    @property
+    def supabase_jwt_issuer(self) -> str:
+        """Expected `iss` claim on Supabase access tokens."""
+        return self.supabase_auth_url
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        """JWKS endpoint exposing the project's asymmetric public signing keys."""
+        return f"{self.supabase_auth_url}/.well-known/jwks.json"
 
 
 @lru_cache
