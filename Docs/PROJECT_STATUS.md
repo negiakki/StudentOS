@@ -29,12 +29,13 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 3 — Database
+🟢 Phase 4 — Timetable Upload
 
 Status: Not Started
 
-(Phase 1 — Repository Setup: ✅ Complete. Phase 2 — Authentication: ✅ Complete,
-pending two Supabase-dashboard config steps by the owner — see Phase 2 notes.)
+(Phase 1 ✅ · Phase 2 ✅ · Phase 3 — Database: ✅ code complete & verified offline;
+one live step pending — apply the migration to Supabase once the real DATABASE_URL
+is set in backend/.env: `alembic upgrade head`.)
 
 ---
 
@@ -91,15 +92,21 @@ Database
 
 Status
 
-⬜ Not Started
+✅ Code complete & verified offline (live migration apply pending DATABASE_URL)
 
 Tasks
 
-* SQLAlchemy Models
-* Alembic Migrations
-* Repository Layer
-* Service Layer
-* Database Connection
+* ✅ SQLAlchemy Models — all 11 tables + enums (SQLAlchemy 2.0 typed models)
+* ✅ Alembic Migrations — env wired to settings/metadata; initial migration generated + upgrade/downgrade verified
+* ✅ Repository Layer — BaseRepository + UserScopedRepository + User/Settings repos
+* ✅ Service Layer — UserService (get-or-create profile, onboarding) via repos
+* ✅ Database Connection — engine + session + get_db dependency
+
+Verified: 11 tables build; relationships + cascade account-delete; full
+api→service→repository→db flow for /users/me (idempotent) and onboarding; auth enforced.
+
+Live step for the owner: set the real Supabase `DATABASE_URL` in backend/.env, then
+`alembic upgrade head` to create the schema in Supabase.
 
 ---
 
@@ -292,3 +299,9 @@ Version 1.0
   middleware-protected routes. Backend verifies Supabase ES256 JWTs via JWKS
   (HS256 fallback) with get_current_user + /auth/me. Verified at runtime:
   protected routes redirect unauthenticated users; backend rejects invalid tokens.
+* Phase 3 (Database) implemented: SQLAlchemy 2.0 models for all 11 tables + enums,
+  UUID PKs, indexes, cascade relationships; Alembic env + initial migration
+  (upgrade/downgrade verified); DB session layer (get_db); repository layer
+  (base + user-scoped + User/Settings) and service layer (UserService); /users/me
+  and onboarding endpoints exercising the full stack. Verified offline on SQLite.
+  Pending: apply migration to Supabase once DATABASE_URL is set.
