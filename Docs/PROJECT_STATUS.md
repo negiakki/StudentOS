@@ -33,9 +33,9 @@ Primary MVP:
 
 Status: Not Started
 
-(Phase 1 ✅ · Phase 2 ✅ · Phase 3 — Database: ✅ code complete & verified offline;
-one live step pending — apply the migration to Supabase once the real DATABASE_URL
-is set in backend/.env: `alembic upgrade head`.)
+(Phase 1 ✅ · Phase 2 ✅ · Phase 3 — Database: ✅ Complete — migration applied to
+Supabase (PostgreSQL 17.6); all 11 tables live, zero drift (`alembic check`), and a
+full /users/me + onboarding round-trip verified against the real database.)
 
 ---
 
@@ -92,7 +92,7 @@ Database
 
 Status
 
-✅ Code complete & verified offline (live migration apply pending DATABASE_URL)
+✅ Complete — migration applied to Supabase and verified live
 
 Tasks
 
@@ -105,8 +105,9 @@ Tasks
 Verified: 11 tables build; relationships + cascade account-delete; full
 api→service→repository→db flow for /users/me (idempotent) and onboarding; auth enforced.
 
-Live step for the owner: set the real Supabase `DATABASE_URL` in backend/.env, then
-`alembic upgrade head` to create the schema in Supabase.
+Live: migration applied to Supabase (PostgreSQL 17.6) via `alembic upgrade head`;
+all 11 tables + alembic_version present; `alembic check` reports zero drift; a
+live /users/me + onboarding round-trip (with cascade cleanup) passed against Supabase.
 
 ---
 
