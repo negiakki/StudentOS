@@ -1,15 +1,16 @@
 """Timetable business logic (Docs/03_System_Architecture.md §7, §11).
 
-Owns the two-step upload flow:
+V1 (storage-only) — the active flow:
+  upload_file  — store the file in Supabase Storage and save its reference. No AI.
+  get_file     — return the current file reference + a signed view URL.
+  delete_file  — remove the stored object and its metadata row.
 
-  1. upload_and_parse — store the file in Supabase Storage, run the AI parser,
-     record upload metadata, and return a *preview* (nothing academic is saved
-     yet; the user reviews and edits it first).
-  2. save_timetable — persist the user-confirmed subjects + slots, replacing any
-     existing timetable (V1: one timetable per user, Docs/04_Database_Design.md §11).
+Preserved for V2 (automatic parsing, gated by `ENABLE_TIMETABLE_PARSING`):
+  upload_and_parse — store + parse via the vision router → editable preview.
+  save_timetable / get_timetable — persist / read confirmed subjects + slots.
 
-Services own logic and delegate persistence to repositories. All state changes
-happen on the session and are committed by the request-scoped `get_db` dependency.
+Services own logic and delegate persistence to repositories. State changes happen
+on the session and are committed by the request-scoped `get_db` dependency.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.ai.timetable_parser import ParseResult, TimetableParser
+from app.core.config import get_settings
 from app.models.academic import Subject, TimetableSlot
 from app.models.enums import FileCategory, ParsingStatus
 from app.models.system import UploadedFile
@@ -32,12 +34,14 @@ from app.schemas.timetable import (
     SlotPreview,
     SubjectInput,
     SubjectPreview,
+    TimetableFile,
+    TimetableFileState,
     TimetableOut,
     TimetablePreview,
 )
 from app.services.storage_service import StorageService
 
-# Uploaded timetables are stored under a fixed name per user (one per user), so a
+# One timetable per user: the stored object uses a fixed name per file type, so a
 # re-upload overwrites the previous object. Extension tracks the upload's type.
 _EXTENSION_BY_MIME = {
     "application/pdf": "pdf",
@@ -74,7 +78,125 @@ class TimetableService:
             self._parser = TimetableParser()
         return self._parser
 
-    # --- Step 1: upload + parse -> preview ---
+    # =====================================================================
+    # V1 — storage-only upload (no AI)
+    # =====================================================================
+
+    def upload_file(
+        self,
+        *,
+        user_id: uuid.UUID,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> TimetableFile:
+        """Store the uploaded timetable and save its reference. No AI is called.
+
+        Replaces any previous timetable for the user (one per user, §11): the
+        stored object is overwritten in place and the metadata row is upserted.
+        Returns the file reference with a signed URL for immediate display.
+        """
+        upload = self._store_and_record(
+            user_id=user_id,
+            filename=filename,
+            content=content,
+            content_type=content_type,
+        )
+        return self._to_file(upload)
+
+    def get_file(self, *, user_id: uuid.UUID) -> TimetableFileState:
+        """Return the user's uploaded timetable file reference, if any."""
+        upload = self.files.get_timetable_for_user(user_id)
+        if upload is None:
+            return TimetableFileState(has_file=False, file=None)
+        return TimetableFileState(has_file=True, file=self._to_file(upload))
+
+    def delete_file(self, *, user_id: uuid.UUID) -> bool:
+        """Delete the user's timetable file (storage object + metadata row).
+
+        Returns True if a file existed and was removed, False if there was none.
+        Subjects/slots (populated only in V2) are left untouched.
+        """
+        upload = self.files.get_timetable_for_user(user_id)
+        if upload is None:
+            return False
+
+        self.storage.delete(upload.storage_path)
+        self.files.delete(upload)
+        return True
+
+    def _store_and_record(
+        self,
+        *,
+        user_id: uuid.UUID,
+        filename: str,
+        content: bytes,
+        content_type: str,
+        result: ParseResult | None = None,
+    ) -> UploadedFile:
+        """Upload to storage and upsert the user's single uploaded-file row (§11).
+
+        `result` is None for the storage-only path (parsing_status = PENDING).
+        When a parse ran (V2), it sets SUCCESS/FAILED + confidence.
+        """
+        extension = _EXTENSION_BY_MIME.get(content_type, "bin")
+        stored_name = f"timetable.{extension}"
+        new_path = self.storage.build_object_path(user_id, stored_name)
+
+        existing = self.files.get_timetable_for_user(user_id)
+        # If the file type changed, the old object lives at a different path —
+        # remove it so we don't leave an orphan behind.
+        if existing is not None and existing.storage_path != new_path:
+            self.storage.delete(existing.storage_path)
+
+        storage_path = self.storage.upload(
+            user_id=user_id,
+            filename=stored_name,
+            content=content,
+            content_type=content_type,
+        )
+
+        if result is None:
+            status = ParsingStatus.PENDING
+            confidence: Decimal | None = None
+        else:
+            status = ParsingStatus.SUCCESS if result.succeeded else ParsingStatus.FAILED
+            confidence = result.confidence if result.succeeded else None
+
+        if existing is None:
+            upload = UploadedFile(
+                user_id=user_id,
+                file_category=FileCategory.TIMETABLE,
+                filename=filename,
+                storage_path=storage_path,
+                mime_type=content_type,
+                parsing_status=status,
+                parsing_confidence=confidence,
+            )
+            self.files.add(upload)
+        else:
+            existing.filename = filename
+            existing.storage_path = storage_path
+            existing.mime_type = content_type
+            existing.parsing_status = status
+            existing.parsing_confidence = confidence
+            self.db.flush()
+            upload = existing
+        return upload
+
+    def _to_file(self, upload: UploadedFile) -> TimetableFile:
+        return TimetableFile(
+            id=upload.id,
+            filename=upload.filename,
+            mime_type=upload.mime_type,
+            storage_path=upload.storage_path,
+            uploaded_at=upload.uploaded_at,
+            view_url=self.storage.create_signed_url(upload.storage_path),
+        )
+
+    # =====================================================================
+    # V2 — automatic parsing (preserved; gated by ENABLE_TIMETABLE_PARSING)
+    # =====================================================================
 
     def upload_and_parse(
         self,
@@ -84,30 +206,23 @@ class TimetableService:
         content: bytes,
         content_type: str,
     ) -> TimetablePreview:
-        """Store the upload, parse it, and return a preview for user confirmation.
+        """Store the upload, parse it via the vision router, and return a preview.
 
-        The uploaded file replaces any previous timetable object in storage and
-        its metadata row. Academic data (subjects/slots) is NOT touched here —
-        only after the user confirms via `save_timetable`.
+        Preserved for V2. Guarded so it is never reachable while automatic
+        parsing is disabled. Academic data is not saved here — only after the
+        user confirms via `save_timetable`.
         """
-        extension = _EXTENSION_BY_MIME.get(content_type, "bin")
-        stored_name = f"timetable.{extension}"
-
-        # Replace the previous storage object (if any) at the stable user path.
-        storage_path = self.storage.upload(
-            user_id=user_id,
-            filename=stored_name,
-            content=content,
-            content_type=content_type,
-        )
+        if not get_settings().enable_timetable_parsing:
+            raise RuntimeError(
+                "Automatic timetable parsing is disabled (ENABLE_TIMETABLE_PARSING)."
+            )
 
         result = self.parser.parse(content=content, mime_type=content_type)
-
-        upload = self._record_upload(
+        upload = self._store_and_record(
             user_id=user_id,
             filename=filename,
-            storage_path=storage_path,
-            mime_type=content_type,
+            content=content,
+            content_type=content_type,
             result=result,
         )
 
@@ -135,52 +250,15 @@ class TimetableService:
             ],
         )
 
-    def _record_upload(
-        self,
-        *,
-        user_id: uuid.UUID,
-        filename: str,
-        storage_path: str,
-        mime_type: str,
-        result: ParseResult,
-    ) -> UploadedFile:
-        """Upsert the user's single uploaded-file metadata row (§11)."""
-        status = ParsingStatus.SUCCESS if result.succeeded else ParsingStatus.FAILED
-        confidence = result.confidence if result.succeeded else None
-
-        upload = self.files.get_timetable_for_user(user_id)
-        if upload is None:
-            upload = UploadedFile(
-                user_id=user_id,
-                file_category=FileCategory.TIMETABLE,
-                filename=filename,
-                storage_path=storage_path,
-                mime_type=mime_type,
-                parsing_status=status,
-                parsing_confidence=confidence,
-            )
-            self.files.add(upload)
-        else:
-            upload.filename = filename
-            upload.storage_path = storage_path
-            upload.mime_type = mime_type
-            upload.parsing_status = status
-            upload.parsing_confidence = confidence
-            self.db.flush()
-        return upload
-
-    # --- Step 2: confirm -> save ---
-
     def save_timetable(
         self, *, user_id: uuid.UUID, subjects: list[SubjectInput]
     ) -> TimetableOut:
         """Persist the user-confirmed timetable, replacing any existing one.
 
-        V1 keeps a single timetable per user, so we clear the user's current
-        subjects (cascading to their slots) and recreate from the confirmed data.
+        Preserved for V2 (parse → confirm → save). Clears the user's current
+        subjects (cascading to slots) and recreates from the confirmed data.
         """
         for existing in self.subjects.list_for_user(user_id):
-            # Cascade removes the subject's slots, summary, and records.
             self.subjects.delete(existing)
 
         saved: list[Subject] = []
@@ -207,10 +285,9 @@ class TimetableService:
         self.db.flush()
         return self._to_out(saved)
 
-    # --- Read ---
-
     def get_timetable(self, *, user_id: uuid.UUID) -> TimetableOut:
-        """The user's saved subjects with their slots (empty if none)."""
+        """The user's saved subjects with their slots (empty if none). Preserved
+        for V2; V1 populates no subjects."""
         subjects = self.subjects.list_for_user(user_id)
         return self._to_out(subjects)
 

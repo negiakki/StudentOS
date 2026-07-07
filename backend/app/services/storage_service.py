@@ -17,7 +17,7 @@ import httpx
 
 from app.core.config import get_settings
 
-# Formats accepted by the timetable parser (Docs/02_PRD.md §7).
+# Timetable upload formats accepted in V1 (Docs/02_PRD.md §7).
 ALLOWED_MIME_TYPES: frozenset[str] = frozenset(
     {"application/pdf", "image/png", "image/jpeg"}
 )
@@ -90,6 +90,36 @@ class StorageService:
             )
 
         return object_path
+
+    def create_signed_url(self, object_path: str, *, expires_in: int = 3600) -> str | None:
+        """Return a time-limited URL to view/download a private object.
+
+        Works whether the bucket is public or private, so the frontend can show
+        the uploaded timetable without exposing the service key. Returns None if
+        unconfigured or if the object cannot be signed (e.g. it no longer exists).
+        """
+        if not self._configured:
+            return None
+
+        url = f"{self._base_url}/object/sign/{self._bucket}/{object_path}"
+        try:
+            response = httpx.post(
+                url,
+                json={"expiresIn": expires_in},
+                headers=self._headers("application/json"),
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError:
+            return None
+
+        if response.status_code != 200:
+            return None
+
+        # Supabase returns a relative `signedURL` under /storage/v1.
+        signed = response.json().get("signedURL")
+        if not signed:
+            return None
+        return f"{self._base_url}{signed}" if signed.startswith("/") else signed
 
     def delete(self, object_path: str) -> None:
         """Remove an object. Best-effort: a missing object is not an error."""

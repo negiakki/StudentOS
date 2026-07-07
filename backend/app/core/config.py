@@ -47,12 +47,30 @@ class Settings(BaseSettings):
     # Reject uploads larger than this (defense-in-depth alongside the parser).
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
 
-    # --- AI provider layer; timetable parsing (Phase 4) + Coco (Phase 9) ---
-    ai_provider: str = "gemini"
+    # --- AI provider layer (Phase 4.5) ---
+    # The app talks only to the routers (app/ai/routers); provider choice is
+    # configuration, never hard-coded. Selection is by these two switches.
+    vision_provider: str = "gemini"
+    chat_provider: str = "openrouter"
+
     gemini_api_key: str = ""
     # Vision-capable model used to extract timetable structure from an upload.
     gemini_model: str = "gemini-2.0-flash"
+
+    openrouter_api_key: str = ""
+    # Default chat model on OpenRouter (used from Phase 6).
+    openrouter_model: str = "openai/gpt-4o-mini"
+
     watsonx_api_key: str = ""
+
+    # Master switch for automatic timetable parsing. V1 ships storage-only:
+    # upload is instant and no AI provider is called. Flip to true in V2 to
+    # re-enable the parse → preview → confirm flow (all code is preserved).
+    enable_timetable_parsing: bool = False
+
+    # Deprecated alias kept for backwards compatibility with earlier config.
+    # Prefer `vision_provider` / `chat_provider`. Unused by the router layer.
+    ai_provider: str = "gemini"
 
     @property
     def supabase_storage_url(self) -> str:

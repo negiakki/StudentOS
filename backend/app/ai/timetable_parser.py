@@ -1,8 +1,13 @@
-"""Timetable extraction via Gemini Vision (Docs/03_System_Architecture.md §11).
+"""Timetable extraction via the vision router (Docs/03_System_Architecture.md §11).
 
 The parser turns an uploaded PDF/image into structured subjects + slots. It only
 extracts facts — the AI never guesses schedule data it cannot see, and the user
 confirms/edits the result before anything is saved (Docs/05_Coco_Agent_Design.md).
+
+STATUS: preserved for V2. V1 ships storage-only upload and does NOT call this
+module (gated by `ENABLE_TIMETABLE_PARSING`). All prompts, validation, and
+normalization here remain valid and reusable — only the provider call now goes
+through the vision router (Phase 4.5) instead of talking to Gemini directly.
 
 Failure is expected and handled: if the provider is unconfigured or errors, we
 return an empty, FAILED result so the user can still build the timetable by hand
@@ -15,7 +20,8 @@ import json
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from app.core.config import get_settings
+from app.ai.interfaces.vision_provider import VisionRequest
+from app.ai.routers.vision_router import get_vision_router
 
 # JSON contract we ask Gemini to return. `day_of_week` is 1 (Mon)..7 (Sun);
 # times are 24-hour "HH:MM" (Docs/04_Database_Design.md §6).
@@ -76,45 +82,38 @@ class ParseResult:
 
 
 class TimetableParser:
-    """Extracts timetable structure from an uploaded file using Gemini Vision."""
+    """Extracts timetable structure from an uploaded file via the vision router.
 
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._api_key = settings.gemini_api_key
-        self._model = settings.gemini_model
+    The concrete vision provider (Gemini today, configurable via VISION_PROVIDER)
+    is selected by the router; this parser stays provider-agnostic and owns only
+    the prompt and the response validation/normalization.
+    """
+
+    def __init__(self, vision_router=None) -> None:
+        # Injectable for testing; defaults to the configured vision router.
+        self._router = vision_router or get_vision_router()
 
     @property
     def available(self) -> bool:
-        return bool(self._api_key)
+        return self._router.available
 
     def parse(self, *, content: bytes, mime_type: str) -> ParseResult:
         """Parse an upload into subjects + slots. Never raises: any failure is
         returned as a FAILED result so the caller can fall back to manual entry."""
-        if not self.available:
-            return ParseResult.failed("AI parser is not configured (GEMINI_API_KEY).")
-
-        try:
-            raw = self._generate(content=content, mime_type=mime_type)
-        except Exception as exc:  # provider/network/SDK error — stay resilient
-            return ParseResult.failed(f"Timetable parsing failed: {exc}")
-
-        return self._parse_response(raw)
-
-    def _generate(self, *, content: bytes, mime_type: str) -> str:
-        # Imported lazily so the app boots even if the SDK is absent.
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=self._api_key)
-        response = client.models.generate_content(
-            model=self._model,
-            contents=[
-                types.Part.from_bytes(data=content, mime_type=mime_type),
-                _PROMPT,
-            ],
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        result = self._router.generate(
+            VisionRequest(
+                content=content,
+                mime_type=mime_type,
+                prompt=_PROMPT,
+                json_response=True,
+            )
         )
-        return response.text or ""
+        if not result.ok:
+            return ParseResult.failed(
+                result.error or "Timetable parsing failed."
+            )
+
+        return self._parse_response(result.text)
 
     def _parse_response(self, raw: str) -> ParseResult:
         text = _strip_code_fence(raw).strip()
