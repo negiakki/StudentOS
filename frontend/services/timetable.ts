@@ -1,42 +1,38 @@
 /**
- * Timetable API service (Phase 4). Built on lib/api.ts; no React here.
+ * Timetable API service (V1 — storage-only). Built on lib/api.ts; no React here.
  * Each call needs the caller's Supabase access token for the backend JWT gate.
  */
 
 import { apiFetch } from "@/lib/api";
-import type {
-  TimetableOut,
-  TimetablePreview,
-  TimetableSaveRequest,
-} from "@/types/timetable";
+import type { TimetableFile, TimetableFileState } from "@/types/timetable";
 
-/** Upload a PDF/PNG/JPG timetable and get back an editable, parsed preview. */
-export async function uploadTimetable(
+/** Upload (or replace) the timetable file. Stored only — no parsing. */
+export async function uploadTimetableFile(
   file: File,
   accessToken: string,
-): Promise<TimetablePreview> {
+): Promise<TimetableFile> {
   const form = new FormData();
   form.append("file", file);
-  return apiFetch<TimetablePreview>("/timetable/upload", {
+  return apiFetch<TimetableFile>("/timetable/upload", {
     method: "POST",
     body: form,
     accessToken,
   });
 }
 
-/** Persist the user-confirmed timetable, replacing any existing one. */
-export async function saveTimetable(
-  payload: TimetableSaveRequest,
+/** Get the current uploaded timetable file (with a signed view URL), if any. */
+export async function getTimetableFile(
   accessToken: string,
-): Promise<TimetableOut> {
-  return apiFetch<TimetableOut>("/timetable", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    accessToken,
-  });
+): Promise<TimetableFileState> {
+  return apiFetch<TimetableFileState>("/timetable", { accessToken });
 }
 
-/** Read the user's saved timetable (empty subjects if none yet). */
-export async function getTimetable(accessToken: string): Promise<TimetableOut> {
-  return apiFetch<TimetableOut>("/timetable", { accessToken });
+/** Delete the uploaded timetable file. Idempotent. */
+export async function deleteTimetableFile(
+  accessToken: string,
+): Promise<{ success: boolean; removed: boolean }> {
+  return apiFetch<{ success: boolean; removed: boolean }>("/timetable", {
+    method: "DELETE",
+    accessToken,
+  });
 }

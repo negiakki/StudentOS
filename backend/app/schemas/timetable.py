@@ -1,17 +1,45 @@
-"""Timetable API schemas (Phase 4).
+"""Timetable API schemas.
 
-Two flows share these shapes:
-- Upload → parse → *preview* (not persisted; the user reviews/edits it).
-- *Confirm* the (possibly edited) preview → save subjects + slots.
+V1 (storage-only) uses:
+- TimetableFile — the uploaded file reference + a signed view URL.
+
+Preserved for V2 (automatic parsing, gated by ENABLE_TIMETABLE_PARSING):
+- Upload → parse → *preview* (TimetablePreview; not persisted; user edits it).
+- *Confirm* the edited preview → save subjects + slots (TimetableSaveRequest).
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import time
+from datetime import datetime, time
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+# --- V1: uploaded timetable file reference (storage-only) ---
+
+
+class TimetableFile(BaseModel):
+    """The user's uploaded timetable file. V1 stores the file only — no parsing.
+
+    `view_url` is a short-lived signed URL for displaying/downloading the file;
+    it is generated per request and never persisted.
+    """
+
+    id: uuid.UUID
+    filename: str
+    mime_type: str
+    storage_path: str
+    uploaded_at: datetime
+    view_url: str | None = None
+
+
+class TimetableFileState(BaseModel):
+    """Whether a timetable file exists for the user, and its details if so."""
+
+    has_file: bool = False
+    file: TimetableFile | None = None
 
 
 class SlotInput(BaseModel):

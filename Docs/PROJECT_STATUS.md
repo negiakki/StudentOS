@@ -33,11 +33,20 @@ Primary MVP:
 
 Status: Not Started
 
-(Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload: ✅ Complete —
-upload → Supabase Storage → Gemini Vision parse → editable preview → confirm →
-save. Backend + frontend build clean; live round-trips verified against real
-Supabase DB and Storage. Gemini connectivity confirmed; automatic parsing is
-gated on the owner enabling Gemini API quota/billing — see Phase 4 notes.)
+(Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
+✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
+AI. Phase 4.5 — AI Provider Layer: ✅ Complete — interfaces → providers → routers;
+app talks only to routers; provider choice is config. Automatic parsing is
+postponed to V2 and preserved behind `ENABLE_TIMETABLE_PARSING=false`. Backend +
+frontend build/lint clean; live upload/replace/delete verified against real
+Supabase Storage + DB with no AI called.)
+
+## V1 Simplification (product decision)
+
+Automatic timetable parsing (OCR/AI) is postponed to V2 to ship a polished V1
+fast. V1 upload is storage-only. All parser code — prompts, validation,
+normalization, schemas — is preserved and reachable in V2 by flipping
+`ENABLE_TIMETABLE_PARSING=true` (deferred to V2; see "Deferred to V2" below).
 
 ---
 
@@ -115,48 +124,80 @@ live /users/me + onboarding round-trip (with cascade cleanup) passed against Sup
 
 ## Phase 4
 
-Timetable Upload
+Timetable Upload (Storage Only)
 
 Status
 
-✅ Complete — upload → storage → parse → preview → confirm → save, verified live
+✅ Complete — upload → Supabase Storage → save reference → display, verified live
+
+V1 flow (no AI, instant): upload a PDF/PNG/JPG → store it → save the file
+reference → show the uploaded file. Replace and delete supported. Automatic
+parsing (subjects/days/timings extraction) is deferred to V2 (see below).
 
 Tasks
 
-* ✅ File Upload — `POST /timetable/upload` (multipart); PDF/PNG/JPG only, 10 MB cap,
-  empty/oversized/unsupported rejected with clear errors
+* ✅ File Upload — `POST /timetable/upload` (multipart); PDF/PNG/JPG only, 10 MB
+  cap, empty/oversized/unsupported rejected with clear errors
 * ✅ Storage — `StorageService` writes to Supabase Storage (service-role key, REST
-  via httpx); files namespaced per user (`{user_id}/timetable/…`), re-upload upserts
-* ✅ Parser — `app/ai/timetable_parser.py`: Gemini Vision (config-driven model)
-  extracts subjects/days/timings/faculty/room as structured JSON; validates and
-  normalizes times, drops malformed slots; never raises (falls back to manual entry)
-* ✅ Preview Screen — parsed result returned as an editable `TimetablePreview`
-  (nothing academic saved yet); frontend `TimetableManager` renders a full editor
-* ✅ User Confirmation — user edits/adds/removes subjects & classes, client-side
-  validation, then confirms
-* ✅ Save Timetable — `POST /timetable` replaces any existing timetable (one per
-  user): clears prior subjects (cascade) and recreates from confirmed data;
-  `GET /timetable` reads it back (slots sorted by day/time)
+  via httpx); files namespaced per user (`{user_id}/timetable/…`), re-upload
+  upserts and orphaned objects (on type change) are cleaned up; signed view URLs
+* ✅ Save reference — one `uploaded_files` row per user (upsert); stores user_id,
+  storage_path, uploaded_at, filename, mime_type; `parsing_status = PENDING`
+  (parser fields kept, unused in V1)
+* ✅ Display / Replace / Delete — `GET /timetable` returns the file + signed URL;
+  frontend shows the image inline (or PDF in an iframe); `DELETE /timetable`
+  removes storage object + row
+
+Preserved for V2 (gated by `ENABLE_TIMETABLE_PARSING=false`, HTTP 404 while off):
+`POST /timetable/parse`, `POST /timetable/confirm`, `GET /timetable/subjects`,
+backed by the preserved parser, preview/save schemas, and service methods.
 
 Architecture: routes → `TimetableService` → repositories → DB, plus
-`StorageService` and the AI parser; auth-scoped to the JWT user (no user id from
-the client). Frontend: authed `apiFetch` (FormData-aware), `services/timetable.ts`,
-`types/timetable.ts`, protected `/timetable` page.
+`StorageService`; auth-scoped to the JWT user (no user id from the client).
+Frontend: authed `apiFetch` (FormData-aware), `services/timetable.ts`,
+`types/timetable.ts`, `features/timetable/TimetableUpload.tsx`, protected
+`/timetable` page.
 
-Verified: backend imports + OpenAPI generate; `google-genai` installed; frontend
-`next build` + `next lint` clean (`/timetable` route present). Live: save/read/
-replace round-trip against real Supabase Postgres (with cascade cleanup); Supabase
-Storage upload+delete against the live `timetables` bucket; slot validation
-(end > start) enforced in schema and UI.
+Verified: backend imports + OpenAPI generate; frontend `next build` + `next lint`
+clean (`/timetable` route present). Live against real Supabase: storage-only
+upload, get (with signed URL), replace (PNG→PDF with orphan cleanup), single-row
+invariant, and delete — with **no AI provider called**; the gated V2 path refuses
+while parsing is disabled.
 
-Owner action required to exercise automatic parsing end-to-end:
-* Enable **Gemini API** billing/quota for the project — the current free-tier quota
-  for `gemini-2.0-flash` is `limit: 0` (API returns HTTP 429). Connectivity and the
-  request/response path are confirmed working; only quota is missing. The model is
-  configurable via `GEMINI_MODEL`. Until then, upload still works and users complete
-  the timetable via the manual editor (graceful fallback, Architecture §15).
-* Ensure the Supabase Storage bucket named by `SUPABASE_STORAGE_BUCKET`
-  (default `timetables`) exists — verified present in the current project.
+---
+
+## Phase 4.5
+
+AI Provider Layer
+
+Status
+
+✅ Complete — interfaces → providers → routers; provider choice is config
+
+The application talks only to the vision/chat routers; it never imports a
+provider directly. Switching providers requires editing only `.env`
+(Docs/03_System_Architecture.md §13).
+
+Tasks
+
+* ✅ Interfaces — `app/ai/interfaces/vision_provider.py`, `chat_provider.py`
+  (ports every provider implements)
+* ✅ Providers — `app/ai/providers/gemini.py` (VisionProvider, primary),
+  `app/ai/providers/openrouter.py` (ChatProvider stub for Phase 6, fails
+  gracefully)
+* ✅ Routers — `app/ai/routers/vision_router.py`, `chat_router.py` select the
+  provider by `VISION_PROVIDER` / `CHAT_PROVIDER`, with safe fallback
+* ✅ Parser rewired — `timetable_parser.py` now calls the vision router (prompts,
+  validation, normalization unchanged), so V2 parsing works through the layer
+* ✅ Config — `VISION_PROVIDER`, `CHAT_PROVIDER`, `OPENROUTER_API_KEY`,
+  `OPENROUTER_MODEL`, `ENABLE_TIMETABLE_PARSING` added to settings + `.env(.example)`
+
+Phase 6 (Coco): use OpenRouter as primary chat, Gemini as primary vision, both
+through the routers.
+
+Verified: routers resolve providers; Gemini vision reports available; OpenRouter
+chat stub reports unavailable and fails gracefully; parser produces correct
+structured output via an injected fake router.
 
 ---
 
@@ -272,6 +313,19 @@ Tasks
 
 ---
 
+# Deferred to V2
+
+* **Automatic Timetable Parsing** — extract subjects/days/timings from the
+  uploaded file via the vision router (Gemini). Code is complete and preserved
+  (`app/ai/timetable_parser.py`, preview/save schemas, `TimetableService`
+  parse/confirm methods, `/timetable/parse|confirm|subjects` routes). Enable by
+  setting `ENABLE_TIMETABLE_PARSING=true`, then rebuild the frontend
+  preview/confirm UI (removed from V1; recoverable from git —
+  `frontend/features/timetable/TimetableManager.tsx`).
+* **Coco chat (OpenRouter)** — provider is a stub; complete in Phase 6.
+
+---
+
 # Known Constraints
 
 * Current semester only
@@ -348,3 +402,18 @@ Version 1.0
   verified against real Supabase Postgres and Storage. Gemini connectivity
   confirmed; automatic parsing is gated on Gemini API quota/billing (free-tier
   limit 0 → HTTP 429) — owner action, not a code issue.
+* V1 Refactor (product decision) — timetable upload simplified to **storage-only**
+  for a fast, polished V1; automatic parsing deferred to V2. `POST /timetable/upload`
+  now stores the file and returns its reference (no AI); `GET /timetable` returns the
+  file + a signed view URL; `DELETE /timetable` removes it. Frontend rebuilt to
+  upload/view/replace/delete (`features/timetable/TimetableUpload.tsx`); the parse/
+  preview/confirm UI was removed (recoverable from git). All parser code is preserved
+  behind `ENABLE_TIMETABLE_PARSING=false`; the parse/confirm/subjects routes return
+  404 while disabled.
+* Phase 4.5 (AI Provider Layer) implemented: `app/ai/{interfaces,providers,routers}`.
+  The app talks only to the vision/chat routers; providers (Gemini vision; OpenRouter
+  chat stub) are selected by `VISION_PROVIDER` / `CHAT_PROVIDER`. `timetable_parser`
+  now runs through the vision router (prompts/validation/normalization unchanged).
+  Config adds `VISION_PROVIDER`, `CHAT_PROVIDER`, `OPENROUTER_API_KEY`,
+  `OPENROUTER_MODEL`, `ENABLE_TIMETABLE_PARSING`. Backend + frontend build/lint clean;
+  live storage-only upload/replace/delete verified against Supabase with no AI called.

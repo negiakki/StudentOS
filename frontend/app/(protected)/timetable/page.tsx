@@ -1,7 +1,7 @@
-import { TimetableManager } from "@/features/timetable/TimetableManager";
-import { getTimetable } from "@/services/timetable";
+import { TimetableUpload } from "@/features/timetable/TimetableUpload";
+import { getTimetableFile } from "@/services/timetable";
 import { createClient } from "@/lib/supabase/server";
-import type { TimetableOut } from "@/types/timetable";
+import type { TimetableFile } from "@/types/timetable";
 
 export default async function TimetablePage() {
   const supabase = await createClient();
@@ -10,13 +10,14 @@ export default async function TimetablePage() {
   } = await supabase.auth.getSession();
 
   // The protected layout already guarantees a user; guard the token defensively.
-  let initial: TimetableOut = { subjects: [] };
+  let initialFile: TimetableFile | null = null;
   if (session?.access_token) {
     try {
-      initial = await getTimetable(session.access_token);
+      const state = await getTimetableFile(session.access_token);
+      initialFile = state.file;
     } catch {
-      // Backend unreachable or no timetable yet — start from an empty state.
-      initial = { subjects: [] };
+      // Backend unreachable or nothing uploaded yet — start empty.
+      initialFile = null;
     }
   }
 
@@ -27,11 +28,11 @@ export default async function TimetablePage() {
           Timetable
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Upload your class schedule and confirm the detected classes.
+          Upload your class schedule. You can replace or delete it anytime.
         </p>
       </div>
 
-      <TimetableManager initial={initial} />
+      <TimetableUpload initialFile={initialFile} />
     </div>
   );
 }
