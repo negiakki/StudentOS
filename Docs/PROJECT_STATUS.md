@@ -29,13 +29,15 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 4 — Timetable Upload
+🟢 Phase 5 — Dashboard
 
 Status: Not Started
 
-(Phase 1 ✅ · Phase 2 ✅ · Phase 3 — Database: ✅ Complete — migration applied to
-Supabase (PostgreSQL 17.6); all 11 tables live, zero drift (`alembic check`), and a
-full /users/me + onboarding round-trip verified against the real database.)
+(Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload: ✅ Complete —
+upload → Supabase Storage → Gemini Vision parse → editable preview → confirm →
+save. Backend + frontend build clean; live round-trips verified against real
+Supabase DB and Storage. Gemini connectivity confirmed; automatic parsing is
+gated on the owner enabling Gemini API quota/billing — see Phase 4 notes.)
 
 ---
 
@@ -117,16 +119,44 @@ Timetable Upload
 
 Status
 
-⬜ Not Started
+✅ Complete — upload → storage → parse → preview → confirm → save, verified live
 
 Tasks
 
-* File Upload
-* Storage
-* Parser
-* Preview Screen
-* User Confirmation
-* Save Timetable
+* ✅ File Upload — `POST /timetable/upload` (multipart); PDF/PNG/JPG only, 10 MB cap,
+  empty/oversized/unsupported rejected with clear errors
+* ✅ Storage — `StorageService` writes to Supabase Storage (service-role key, REST
+  via httpx); files namespaced per user (`{user_id}/timetable/…`), re-upload upserts
+* ✅ Parser — `app/ai/timetable_parser.py`: Gemini Vision (config-driven model)
+  extracts subjects/days/timings/faculty/room as structured JSON; validates and
+  normalizes times, drops malformed slots; never raises (falls back to manual entry)
+* ✅ Preview Screen — parsed result returned as an editable `TimetablePreview`
+  (nothing academic saved yet); frontend `TimetableManager` renders a full editor
+* ✅ User Confirmation — user edits/adds/removes subjects & classes, client-side
+  validation, then confirms
+* ✅ Save Timetable — `POST /timetable` replaces any existing timetable (one per
+  user): clears prior subjects (cascade) and recreates from confirmed data;
+  `GET /timetable` reads it back (slots sorted by day/time)
+
+Architecture: routes → `TimetableService` → repositories → DB, plus
+`StorageService` and the AI parser; auth-scoped to the JWT user (no user id from
+the client). Frontend: authed `apiFetch` (FormData-aware), `services/timetable.ts`,
+`types/timetable.ts`, protected `/timetable` page.
+
+Verified: backend imports + OpenAPI generate; `google-genai` installed; frontend
+`next build` + `next lint` clean (`/timetable` route present). Live: save/read/
+replace round-trip against real Supabase Postgres (with cascade cleanup); Supabase
+Storage upload+delete against the live `timetables` bucket; slot validation
+(end > start) enforced in schema and UI.
+
+Owner action required to exercise automatic parsing end-to-end:
+* Enable **Gemini API** billing/quota for the project — the current free-tier quota
+  for `gemini-2.0-flash` is `limit: 0` (API returns HTTP 429). Connectivity and the
+  request/response path are confirmed working; only quota is missing. The model is
+  configurable via `GEMINI_MODEL`. Until then, upload still works and users complete
+  the timetable via the manual editor (graceful fallback, Architecture §15).
+* Ensure the Supabase Storage bucket named by `SUPABASE_STORAGE_BUCKET`
+  (default `timetables`) exists — verified present in the current project.
 
 ---
 
@@ -306,3 +336,15 @@ Version 1.0
   (base + user-scoped + User/Settings) and service layer (UserService); /users/me
   and onboarding endpoints exercising the full stack. Verified offline on SQLite.
   Pending: apply migration to Supabase once DATABASE_URL is set.
+* Phase 4 (Timetable Upload) implemented: `POST /timetable/upload` stores the file
+  in Supabase Storage (per-user path, upsert) and parses it with Gemini Vision into
+  a structured, editable preview; `POST /timetable` saves the user-confirmed
+  subjects + slots (one timetable per user, replacing any prior one); `GET
+  /timetable` reads it back. New `StorageService`, AI `timetable_parser` (graceful
+  fallback to manual entry when the AI is unavailable), timetable repositories,
+  `TimetableService`, and schemas. Frontend: protected `/timetable` page with
+  upload + full manual editor (`features/timetable/TimetableManager`), authed API
+  helper, service, and types. Backend + frontend build clean; live round-trips
+  verified against real Supabase Postgres and Storage. Gemini connectivity
+  confirmed; automatic parsing is gated on Gemini API quota/billing (free-tier
+  limit 0 → HTTP 429) — owner action, not a code issue.

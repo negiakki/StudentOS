@@ -15,3 +15,6 @@ psycopg[binary]==3.2.3
 pyjwt[crypto]==2.10.1
 httpx==0.28.1
 python-multipart==0.0.20
+
+# --- AI: timetable parsing (Gemini Vision) — Phase 4 ---
+google-genai==0.8.0

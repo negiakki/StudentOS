@@ -39,10 +39,25 @@ class Settings(BaseSettings):
     # Expected audience claim on Supabase access tokens.
     supabase_jwt_audience: str = "authenticated"
 
-    # --- AI provider layer; wired up in Phase 9 ---
+    # --- Supabase Storage (timetable uploads; Phase 4) ---
+    # Service-role key: server-side only, bypasses RLS for storage writes. Never
+    # expose to the frontend. Files are namespaced per user so access stays scoped.
+    supabase_service_role_key: str = ""
+    supabase_storage_bucket: str = "timetables"
+    # Reject uploads larger than this (defense-in-depth alongside the parser).
+    max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+
+    # --- AI provider layer; timetable parsing (Phase 4) + Coco (Phase 9) ---
     ai_provider: str = "gemini"
     gemini_api_key: str = ""
+    # Vision-capable model used to extract timetable structure from an upload.
+    gemini_model: str = "gemini-2.0-flash"
     watsonx_api_key: str = ""
+
+    @property
+    def supabase_storage_url(self) -> str:
+        """Base URL of the Supabase Storage REST API."""
+        return f"{self.supabase_url.rstrip('/')}/storage/v1"
 
     @property
     def cors_origin_list(self) -> list[str]:
