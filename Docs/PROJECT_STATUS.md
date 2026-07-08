@@ -31,7 +31,7 @@ Primary MVP:
 
 🟢 Phase 5 — Dashboard
 
-Status: Not Started
+Status: ✅ Complete (pending review)
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -207,17 +207,36 @@ Dashboard
 
 Status
 
-⬜ Not Started
+✅ Complete (pending review)
+
+Product decisions (V1):
+* No "Today's Classes" — timetable parsing is disabled, so there is no
+  structured schedule data. Replaced by a "My Timetable" card that displays the
+  uploaded file directly. Designed as a self-contained component so V2 can swap
+  it for Today's Classes without wider refactoring.
+* Attendance is fully manual — the user creates semester subjects (name, classes
+  attended, total). No subject detection from the timetable (postponed to V2).
 
 Tasks
 
-* Greeting
-* Today's Classes
-* Weather
-* Attendance Summary
-* Assignments
-* Todo
-* Daily Brief
+* ✅ Greeting — time-of-day + name (client-computed to avoid hydration mismatch)
+* ✅ Attendance Overview — overall % + per-subject bars, safe-skips, below-target
+  warnings; empty state links to setup. All figures computed in Python.
+* ✅ My Timetable — inline image/PDF preview of the uploaded file (view-only;
+  replace from the timetable page)
+* ✅ Quick Actions — navigation hub (Timetable, Attendance)
+* ✅ Recent Tasks — calm placeholder (to-dos land in a later phase)
+* ✅ Manual attendance backend — subjects + attendance_summary CRUD; percentage
+  and safe-skip calculations; `/attendance` API + setup page
+* Deferred to later phases: Weather, Assignments, Todo, Daily Brief
+
+Verified: backend imports + routes; attendance calculations and full
+service→repository→DB flow (create/list/overview/update/delete, ownership
+scoping, attended≤total invariant) on SQLite; frontend typecheck + lint + prod
+build clean. In-browser click-through pending review.
+
+Not built (stay in later phases): daily attendance marking, calendar,
+edit-previous-days, safe-skip on the attendance page beyond the computed figure.
 
 ---
 
