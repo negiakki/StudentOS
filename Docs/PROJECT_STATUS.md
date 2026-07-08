@@ -29,11 +29,11 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 6 — Attendance
+🟢 Phase 7 — Assignments
 
-Status: ✅ Complete (pending review)
+Status: ⬜ Not Started (next up)
 
-Phase 5 (Dashboard) is complete, reviewed, and pushed. Phase 6 adds day-by-day
+Phase 6 (Attendance) is complete, reviewed, and pushed. It added day-by-day
 attendance marking (present/absent), edit-previous-days, a month calendar, a
 per-subject Attendance History list, and surfaces the safe-skip figure — all on
 a per-subject detail page reached from the attendance list.
@@ -257,7 +257,7 @@ Attendance
 
 Status
 
-✅ Complete (pending review)
+✅ Complete — reviewed, approved, and pushed
 
 Product decision (V1): the Phase 5 attendance setup (attended/total per subject)
 is treated as a **baseline**; each daily mark applies a **delta** to the stored
@@ -294,7 +294,7 @@ mark/edit/clear deltas, history desc, calendar range asc, ownership scoping,
 attended≤total invariant) and a FastAPI TestClient smoke (status codes, enum
 validation 422, 404 scoping, nested response serialization); frontend typecheck +
 lint + prod build clean (`/attendance/[id]` route present). No AI-layer, parser,
-or migration changes. In-browser click-through pending review.
+or migration changes. In-browser click-through completed during review.
 
 ---
 
@@ -304,7 +304,7 @@ Assignments
 
 Status
 
-⬜ Not Started
+🟢 Current phase — Not Started
 
 Tasks
 
