@@ -1,23 +1,31 @@
-"""Attendance business logic (Phase 5 — manual attendance).
+"""Attendance business logic (Phase 5 setup + Phase 6 daily marking).
 
 Python performs every calculation; the database stores only raw counts
-(Docs/03_System_Architecture.md §5, §16; Docs/04_Database_Design.md §1). V1 is
-manual: subjects and their attended/total counts come from the user. Daily
-marking, the calendar, and edit-previous-days are Phase 6.
+(Docs/03_System_Architecture.md §5, §16; Docs/04_Database_Design.md §1). Setup
+is manual: subjects and their attended/total baseline come from the user. Phase 6
+adds day-by-day marking — each record adjusts the stored summary as a delta, so
+percentage / safe-skips stay derived, and the calendar and history read the same
+records (Docs/04 §8).
 """
 
 from __future__ import annotations
 
 import math
 import uuid
+from datetime import date
 
 from sqlalchemy.orm import Session
 
-from app.models.academic import AttendanceSummary, Subject
-from app.repositories.attendance_repository import AttendanceSummaryRepository
+from app.models.academic import AttendanceRecord, AttendanceSummary, Subject
+from app.models.enums import AttendanceStatus
+from app.repositories.attendance_repository import (
+    AttendanceRecordRepository,
+    AttendanceSummaryRepository,
+)
 from app.repositories.timetable_repository import SubjectRepository
 from app.schemas.attendance import (
     AttendanceOverview,
+    AttendanceRecordOut,
     SubjectAttendance,
     SubjectCreate,
     SubjectUpdate,
@@ -53,6 +61,7 @@ class AttendanceService:
         self.db = db
         self.subjects = SubjectRepository(db)
         self.summaries = AttendanceSummaryRepository(db)
+        self.records = AttendanceRecordRepository(db)
         self.threshold = DEFAULT_ATTENDANCE_THRESHOLD
 
     def add_subject(
@@ -122,7 +131,125 @@ class AttendanceService:
             subjects=items,
         )
 
+    # --- Phase 6: daily marking, calendar, history ---
+
+    def get_subject(
+        self, *, user_id: uuid.UUID, subject_id: uuid.UUID
+    ) -> SubjectAttendance | None:
+        """A single subject's computed attendance. None if not owned/found."""
+        subject = self.subjects.get_for_user(subject_id, user_id)
+        if subject is None:
+            return None
+        summary = self.summaries.get_by_subject(subject_id)
+        return self._to_subject_attendance(subject, summary)
+
+    def mark(
+        self,
+        *,
+        user_id: uuid.UUID,
+        subject_id: uuid.UUID,
+        on_date: date,
+        status: AttendanceStatus,
+    ) -> tuple[SubjectAttendance, AttendanceRecordOut] | None:
+        """Set the subject's status for one day (create or edit the record) and
+        adjust the summary by the delta. Returns None if not owned/found."""
+        subject = self.subjects.get_for_user(subject_id, user_id)
+        if subject is None:
+            return None
+        summary = self._get_or_create_summary(subject_id)
+        existing = self.records.get_by_subject_and_date(subject_id, on_date)
+
+        if existing is None:
+            # A newly recorded class: one more class, present raises attended too.
+            record = AttendanceRecord(
+                subject_id=subject_id, attendance_date=on_date, status=status
+            )
+            self.records.add(record)
+            summary.total_classes += 1
+            if status == AttendanceStatus.PRESENT:
+                summary.attended_classes += 1
+        else:
+            # Editing an existing day: total is unchanged; attended shifts by ±1.
+            record = existing
+            if existing.status != status:
+                if status == AttendanceStatus.PRESENT:
+                    summary.attended_classes += 1
+                else:
+                    summary.attended_classes -= 1
+                existing.status = status
+
+        self._clamp(summary)
+        self.db.flush()
+        return (
+            self._to_subject_attendance(subject, summary),
+            self._to_record_out(record),
+        )
+
+    def unmark(
+        self, *, user_id: uuid.UUID, subject_id: uuid.UUID, on_date: date
+    ) -> SubjectAttendance | None:
+        """Clear a day's record, reversing its effect on the summary. Idempotent.
+        Returns None if the subject is not owned/found."""
+        subject = self.subjects.get_for_user(subject_id, user_id)
+        if subject is None:
+            return None
+        summary = self._get_or_create_summary(subject_id)
+        existing = self.records.get_by_subject_and_date(subject_id, on_date)
+        if existing is not None:
+            summary.total_classes -= 1
+            if existing.status == AttendanceStatus.PRESENT:
+                summary.attended_classes -= 1
+            self.records.delete(existing)
+            self._clamp(summary)
+            self.db.flush()
+        return self._to_subject_attendance(subject, summary)
+
+    def list_records(
+        self,
+        *,
+        user_id: uuid.UUID,
+        subject_id: uuid.UUID,
+        start: date | None = None,
+        end: date | None = None,
+        limit: int | None = None,
+    ) -> list[AttendanceRecordOut] | None:
+        """Records for the calendar (``start``/``end`` range) or the history list
+        (most recent ``limit``, default 30). None if the subject isn't owned."""
+        subject = self.subjects.get_for_user(subject_id, user_id)
+        if subject is None:
+            return None
+        if start is not None and end is not None:
+            rows = self.records.list_range(subject_id, start, end)
+        else:
+            rows = self.records.list_recent(subject_id, limit or 30)
+        return [self._to_record_out(r) for r in rows]
+
     # --- internals ---
+
+    def _get_or_create_summary(self, subject_id: uuid.UUID) -> AttendanceSummary:
+        summary = self.summaries.get_by_subject(subject_id)
+        if summary is None:
+            summary = AttendanceSummary(
+                subject_id=subject_id, attended_classes=0, total_classes=0
+            )
+            self.summaries.add(summary)
+        return summary
+
+    @staticmethod
+    def _clamp(summary: AttendanceSummary) -> None:
+        """Defensive: keep counts non-negative and attended within total."""
+        summary.total_classes = max(0, summary.total_classes)
+        summary.attended_classes = max(
+            0, min(summary.attended_classes, summary.total_classes)
+        )
+
+    @staticmethod
+    def _to_record_out(record: AttendanceRecord) -> AttendanceRecordOut:
+        return AttendanceRecordOut(
+            id=record.id,
+            attendance_date=record.attendance_date,
+            status=record.status,
+        )
 
     def _subjects_with_summaries(
         self, user_id: uuid.UUID

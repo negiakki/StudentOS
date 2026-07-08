@@ -6,6 +6,7 @@
  * be edited or removed. Daily marking / calendar arrives in a later phase.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -301,9 +302,12 @@ function SubjectRow({
   return (
     <li className="flex items-center justify-between gap-3 px-5 py-3">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+        <Link
+          href={`/attendance/${subject.id}`}
+          className="truncate text-sm font-medium text-neutral-900 hover:underline dark:text-neutral-100"
+        >
           {subject.name}
-        </p>
+        </Link>
         <p className="mt-0.5 text-xs text-neutral-500">
           {subject.attended_classes}/{subject.total_classes} ·{" "}
           <span
@@ -321,6 +325,12 @@ function SubjectRow({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <Link
+          href={`/attendance/${subject.id}`}
+          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        >
+          Open
+        </Link>
         <button
           type="button"
           onClick={() => setEditing(true)}

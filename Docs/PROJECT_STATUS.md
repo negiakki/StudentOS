@@ -31,11 +31,12 @@ Primary MVP:
 
 🟢 Phase 6 — Attendance
 
-Status: ⬜ Not Started (next up)
+Status: ✅ Complete (pending review)
 
-Phase 5 (Dashboard) is complete, reviewed, and pushed. A polish pass followed:
-form input visibility in light mode, "← Dashboard" back-navigation on secondary
-pages, and System/Light/Dark theme support with a persisted toggle in the top nav.
+Phase 5 (Dashboard) is complete, reviewed, and pushed. Phase 6 adds day-by-day
+attendance marking (present/absent), edit-previous-days, a month calendar, a
+per-subject Attendance History list, and surfaces the safe-skip figure — all on
+a per-subject detail page reached from the attendance list.
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -256,16 +257,44 @@ Attendance
 
 Status
 
-🟢 Current phase — Not Started
+✅ Complete (pending review)
+
+Product decision (V1): the Phase 5 attendance setup (attended/total per subject)
+is treated as a **baseline**; each daily mark applies a **delta** to the stored
+summary (present → +1 attended / +1 total; absent → +1 total; edit → ±1 attended;
+clear → reverse). This keeps percentage / safe-skips always derived, needs no
+schema change (the `attendance_records` table already exists from Phase 3), and
+makes records the single source for both the Calendar and the Attendance History.
+"Today" labels are computed on the frontend (timezone-safe); the backend is
+date-agnostic and stores only the ISO day it is sent.
 
 Tasks
 
-* Attendance Setup
-* Calendar View
-* Mark Present
-* Mark Absent
-* Edit Previous Days
-* Safe Skip Calculation
+* ✅ Attendance Setup — carried over from Phase 5 (subjects + baseline counts)
+* ✅ Mark Present / Mark Absent — `PUT /attendance/subjects/{id}/records/{date}`
+  (upsert); today's status has one-tap Present / Absent / Clear on the subject page
+* ✅ Edit Previous Days — the same upsert endpoint on any past date, driven from
+  the month calendar (pick a day → Present / Absent / Clear)
+* ✅ Calendar View — `GET …/records?start&end`; month grid with present/absent
+  colouring, future days disabled, month navigation capped at the current month
+* ✅ Attendance History — recent records list on the subject page
+  (`GET …/records?limit`), same data as the calendar
+* ✅ Safe Skip Calculation — surfaced on the subject page (computed in Python,
+  unchanged from Phase 5)
+* ✅ Clear a day — `DELETE …/records/{date}` (reverses the delta; idempotent)
+
+Architecture: routes → `AttendanceService` (delta math, all calculations) →
+`AttendanceRecordRepository` / `AttendanceSummaryRepository` → DB; every query is
+scoped to the authenticated user through the parent subject. Frontend: subject
+detail page `/attendance/[id]` with `SubjectDetail` + `AttendanceCalendar`, new
+service methods, and `lib/date.ts` local-date helpers.
+
+Verified (targeted): backend imports + routes; a SQLite service e2e (baseline +
+mark/edit/clear deltas, history desc, calendar range asc, ownership scoping,
+attended≤total invariant) and a FastAPI TestClient smoke (status codes, enum
+validation 422, 404 scoping, nested response serialization); frontend typecheck +
+lint + prod build clean (`/attendance/[id]` route present). No AI-layer, parser,
+or migration changes. In-browser click-through pending review.
 
 ---
 

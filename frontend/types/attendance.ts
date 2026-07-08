@@ -1,9 +1,23 @@
 /**
- * Attendance domain types (V1 — manual attendance).
+ * Attendance domain types (V1 setup + Phase 6 daily marking).
  *
- * The user enters attended/total per subject; the backend computes percentage,
- * safe-skips, and the threshold warning. Mirrors the backend attendance schemas.
+ * The user enters an attended/total baseline per subject; the backend computes
+ * percentage, safe-skips, and the threshold warning. Phase 6 adds day-by-day
+ * records (present/absent) that adjust those figures. Mirrors the backend schemas.
  */
+
+export type AttendanceStatus = "PRESENT" | "ABSENT";
+
+export interface AttendanceRecord {
+  id: string;
+  attendance_date: string; // ISO date, YYYY-MM-DD
+  status: AttendanceStatus;
+}
+
+export interface RecordMutationResult {
+  subject: SubjectAttendance;
+  record: AttendanceRecord | null;
+}
 
 export interface SubjectAttendance {
   id: string;

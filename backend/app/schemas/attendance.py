@@ -1,16 +1,20 @@
-"""Attendance API schemas (Phase 5 — manual attendance).
+"""Attendance API schemas (Phase 5 setup + Phase 6 daily marking).
 
-V1 attendance is fully manual: the user creates their semester subjects and
-enters classes attended / total. Percentage, safe-skips, and the threshold
-warning are always CALCULATED by the backend, never stored
-(Docs/04_Database_Design.md §1, §7). Daily marking / calendar is Phase 6.
+V1 attendance starts fully manual: the user creates their semester subjects and
+enters classes attended / total (a baseline). Phase 6 adds day-by-day marking
+(present/absent) via attendance records; each mark adjusts the stored summary,
+so percentage, safe-skips, and the threshold warning stay always CALCULATED by
+the backend, never stored (Docs/04_Database_Design.md §1, §7, §8).
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from pydantic import BaseModel, Field, model_validator
+
+from app.models.enums import AttendanceStatus
 
 
 class SubjectCreate(BaseModel):
@@ -57,3 +61,29 @@ class AttendanceOverview(BaseModel):
     overall_percentage: float
     below_threshold_count: int
     subjects: list[SubjectAttendance] = Field(default_factory=list)
+
+
+# --- Phase 6: daily marking ---------------------------------------------------
+
+
+class RecordUpsert(BaseModel):
+    """Set a subject's status for a single day (present or absent)."""
+
+    status: AttendanceStatus
+
+
+class AttendanceRecordOut(BaseModel):
+    """One subject's marked status on one date. Powers both the calendar and the
+    attendance-history list, which read the same records (Docs/04 §8)."""
+
+    id: uuid.UUID
+    attendance_date: date
+    status: AttendanceStatus
+
+
+class RecordMutationResult(BaseModel):
+    """Result of marking / clearing a day: the recomputed subject figures plus the
+    affected record (``None`` when the day was cleared)."""
+
+    subject: SubjectAttendance
+    record: AttendanceRecordOut | None = None
