@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/(auth)/actions";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -33,6 +34,7 @@ export default async function ProtectedLayout({
             <span className="hidden text-sm text-neutral-500 sm:inline">
               {user.email}
             </span>
+            <ThemeToggle />
             <form action={signOut}>
               <button
                 type="submit"

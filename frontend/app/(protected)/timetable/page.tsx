@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { TimetableUpload } from "@/features/timetable/TimetableUpload";
 import { getTimetableFile } from "@/services/timetable";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +25,12 @@ export default async function TimetablePage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-neutral-500 transition hover:text-neutral-900 dark:hover:text-neutral-200"
+      >
+        ← Dashboard
+      </Link>
       <div>
         <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
           Timetable
