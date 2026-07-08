@@ -29,9 +29,13 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 5 — Dashboard
+🟢 Phase 6 — Attendance
 
-Status: ✅ Complete (pending review)
+Status: ⬜ Not Started (next up)
+
+Phase 5 (Dashboard) is complete, reviewed, and pushed. A polish pass followed:
+form input visibility in light mode, "← Dashboard" back-navigation on secondary
+pages, and System/Light/Dark theme support with a persisted toggle in the top nav.
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -207,7 +211,7 @@ Dashboard
 
 Status
 
-✅ Complete (pending review)
+✅ Complete — reviewed, manually tested, and pushed
 
 Product decisions (V1):
 * No "Today's Classes" — timetable parsing is disabled, so there is no
@@ -233,7 +237,13 @@ Tasks
 Verified: backend imports + routes; attendance calculations and full
 service→repository→DB flow (create/list/overview/update/delete, ownership
 scoping, attended≤total invariant) on SQLite; frontend typecheck + lint + prod
-build clean. In-browser click-through pending review.
+build clean. In-browser click-through completed during review.
+
+Polish pass (post-review): light-mode form input text/placeholder legibility,
+"← Dashboard" back-navigation on the Attendance and Timetable pages, and
+System (default) / Light / Dark theme support — persisted to localStorage,
+applied pre-paint to avoid a flash, with a small toggle beside Sign out. No
+feature, architecture, AI-layer, or parser changes; typecheck + lint + build clean.
 
 Not built (stay in later phases): daily attendance marking, calendar,
 edit-previous-days, safe-skip on the attendance page beyond the computed figure.
@@ -246,7 +256,7 @@ Attendance
 
 Status
 
-⬜ Not Started
+🟢 Current phase — Not Started
 
 Tasks
 
