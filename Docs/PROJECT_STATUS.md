@@ -368,6 +368,21 @@ StudentOS v1 is complete when a user can:
 
 ---
 
+## Claude Working Rules
+
+Unless explicitly instructed otherwise:
+
+- Work only on the current phase.
+- Read only files required for the task.
+- Do not revisit previous architecture.
+- Do not implement future phases.
+- Use targeted verification only.
+- Keep commits focused.
+- Do not push automatically.
+- Keep responses concise.
+
+---
+
 # Change Log
 
 Version 1.0
