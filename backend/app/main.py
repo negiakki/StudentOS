@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import auth, health, timetable, users
+from app.api import attendance, auth, health, timetable, users
 from app.core.config import get_settings
 
 
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(timetable.router)
+    app.include_router(attendance.router)
 
     @app.get("/", tags=["root"])
     def root() -> dict[str, str]:
