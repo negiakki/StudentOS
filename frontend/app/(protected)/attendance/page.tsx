@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AttendanceSetup } from "@/features/attendance/AttendanceSetup";
 import { createClient } from "@/lib/supabase/server";
 import { getSubjects } from "@/services/attendance";
@@ -21,6 +23,12 @@ export default async function AttendancePage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-neutral-500 transition hover:text-neutral-900 dark:hover:text-neutral-200"
+      >
+        ← Dashboard
+      </Link>
       <div>
         <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
           Attendance

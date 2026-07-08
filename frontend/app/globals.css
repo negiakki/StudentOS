@@ -7,11 +7,12 @@
   --foreground: #0a0a0a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Theme is class-driven (Tailwind darkMode: "class"); the `dark` class is set
+   on <html> from the user's preference, so base colors track the active theme
+   rather than the OS media query. */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 html,

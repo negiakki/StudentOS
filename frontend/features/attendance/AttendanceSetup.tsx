@@ -177,7 +177,7 @@ function AddSubjectForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Subject name"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500"
         />
         <input
           value={attended}
@@ -185,7 +185,7 @@ function AddSubjectForm({
           type="number"
           min={0}
           placeholder="Attended"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 sm:w-28 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:border-neutral-500 sm:w-28 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500"
         />
         <input
           value={total}
@@ -193,7 +193,7 @@ function AddSubjectForm({
           type="number"
           min={0}
           placeholder="Total"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 sm:w-28 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:border-neutral-500 sm:w-28 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500"
         />
         <button
           type="submit"
@@ -262,14 +262,14 @@ function SubjectRow({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="min-w-40 flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="min-w-40 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-900 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
         />
         <input
           value={attended}
           onChange={(e) => setAttended(e.target.value)}
           type="number"
           min={0}
-          className="w-20 rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="w-20 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-900 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
         />
         <span className="text-neutral-400">/</span>
         <input
@@ -277,7 +277,7 @@ function SubjectRow({
           onChange={(e) => setTotal(e.target.value)}
           type="number"
           min={0}
-          className="w-20 rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+          className="w-20 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-900 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
         />
         <button
           type="button"
