@@ -29,14 +29,14 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 7 — Assignments
+🟢 Phase 8 — Todo
 
 Status: ⬜ Not Started (next up)
 
-Phase 6 (Attendance) is complete, reviewed, and pushed. It added day-by-day
-attendance marking (present/absent), edit-previous-days, a month calendar, a
-per-subject Attendance History list, and surfaces the safe-skip figure — all on
-a per-subject detail page reached from the attendance list.
+Phase 7 (Assignments) is complete. It added full CRUD for assignments
+(title, description, optional subject link, due date, priority), a dashboard
+grouping into Overdue / Due Today / Upcoming computed in Python, and dashboard
+integration replacing the Phase 5 "Recent Tasks" placeholder.
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -304,14 +304,40 @@ Assignments
 
 Status
 
-🟢 Current phase — Not Started
+✅ Complete — verified, ready to merge
+
+Assignments carry a title, optional description, optional subject link,
+optional due date, and priority (Low/Medium/High); status is binary
+(Pending/Completed). The dashboard groups pending assignments into Overdue,
+Due Today, and Upcoming — undated assignments are treated as Upcoming (nothing
+to be overdue against) — with all grouping and sorting (soonest due date
+first, undated last) computed in Python per-request, never persisted. The
+`assignments` table and its enums already existed from the Phase 3 schema, so
+this phase added the API/service/repository/schema layers and the frontend on
+top of it — no new migration was needed.
 
 Tasks
 
-* Create
-* Edit
-* Delete
-* Dashboard Integration
+* ✅ Create — `POST /assignments`, always starts Pending
+* ✅ Edit — `PATCH /assignments/{id}`, partial update; subject_id ownership
+  validated (400 if not owned/doesn't exist); nullable fields (description,
+  subject_id, due_date) can be explicitly cleared
+* ✅ Delete — `DELETE /assignments/{id}`, idempotent
+* ✅ Dashboard Integration — `GET /assignments/dashboard` (Overdue/Due
+  Today/Upcoming); `AssignmentsCard` on the dashboard replaces the Phase 5
+  "Recent Tasks" placeholder; new Quick Actions tile links to `/assignments`
+
+Architecture: routes → `AssignmentService` (subject-ownership checks, sorting,
+dashboard grouping) → `AssignmentRepository` (plain `UserScopedRepository`,
+no custom queries) → DB; every query scoped to the authenticated user.
+Frontend: `/assignments` page with `AssignmentsManager` (add form, Pending/
+Completed sections, inline edit, complete/reopen toggle, delete,
+client-side overdue highlighting), `services/assignments.ts`,
+`types/assignment.ts`.
+
+Verified: backend imports clean (`/assignments` routes present); frontend
+typecheck + lint + prod build clean (`/assignments` route present). No
+migration, AI-layer, or parser changes.
 
 ---
 
@@ -321,7 +347,7 @@ Todo
 
 Status
 
-⬜ Not Started
+🟢 Current phase — Not Started
 
 Tasks
 
@@ -490,3 +516,14 @@ Version 1.0
   Config adds `VISION_PROVIDER`, `CHAT_PROVIDER`, `OPENROUTER_API_KEY`,
   `OPENROUTER_MODEL`, `ENABLE_TIMETABLE_PARSING`. Backend + frontend build/lint clean;
   live storage-only upload/replace/delete verified against Supabase with no AI called.
+* Phase 7 (Assignments) implemented: full CRUD (`POST/GET/PATCH/DELETE
+  /assignments`) on the pre-existing Phase 3 `assignments` schema — no new
+  migration needed. `AssignmentService` validates subject ownership on
+  create/edit and computes sorting (soonest due date first) and a dashboard
+  grouping (Overdue/Due Today/Upcoming, pending only) in Python; `GET
+  /assignments/dashboard` serves it. New `AssignmentRepository`, schemas, and
+  routes registered in `main.py`. Frontend: `/assignments` page with
+  `AssignmentsManager` (add/edit/delete/complete, overdue highlighting), and a
+  dashboard `AssignmentsCard` that replaces the Phase 5 "Recent Tasks"
+  placeholder, plus a new Quick Actions tile. Backend imports and frontend
+  typecheck/lint/build verified clean.

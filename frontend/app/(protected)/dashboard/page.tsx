@@ -1,12 +1,14 @@
+import { AssignmentsCard } from "@/features/dashboard/AssignmentsCard";
 import { AttendanceOverview } from "@/features/dashboard/AttendanceOverview";
 import { Greeting } from "@/features/dashboard/Greeting";
 import { MyTimetableCard } from "@/features/dashboard/MyTimetableCard";
 import { QuickActions } from "@/features/dashboard/QuickActions";
-import { RecentTasks } from "@/features/dashboard/RecentTasks";
 import { createClient } from "@/lib/supabase/server";
+import { getAssignmentDashboard } from "@/services/assignments";
 import { getAttendanceOverview } from "@/services/attendance";
 import { getTimetableFile } from "@/services/timetable";
 import { getProfile } from "@/services/user";
+import type { AssignmentDashboard } from "@/types/assignment";
 import type { AttendanceOverview as Overview } from "@/types/attendance";
 import type { TimetableFile } from "@/types/timetable";
 import type { UserProfile } from "@/types/user";
@@ -33,16 +35,20 @@ export default async function DashboardPage() {
   let profile: UserProfile | null = null;
   let overview: Overview | null = null;
   let timetable: TimetableFile | null = null;
+  let assignmentDashboard: AssignmentDashboard | null = null;
 
   if (token) {
-    const [profileRes, overviewRes, timetableRes] = await Promise.allSettled([
-      getProfile(token),
-      getAttendanceOverview(token),
-      getTimetableFile(token),
-    ]);
+    const [profileRes, overviewRes, timetableRes, assignmentsRes] =
+      await Promise.allSettled([
+        getProfile(token),
+        getAttendanceOverview(token),
+        getTimetableFile(token),
+        getAssignmentDashboard(token),
+      ]);
     if (profileRes.status === "fulfilled") profile = profileRes.value;
     if (overviewRes.status === "fulfilled") overview = overviewRes.value;
     if (timetableRes.status === "fulfilled") timetable = timetableRes.value.file;
+    if (assignmentsRes.status === "fulfilled") assignmentDashboard = assignmentsRes.value;
   }
 
   const name = firstName(profile, userData.user?.email);
@@ -58,7 +64,7 @@ export default async function DashboardPage() {
         </div>
         <div className="space-y-6">
           <QuickActions />
-          <RecentTasks />
+          <AssignmentsCard dashboard={assignmentDashboard} />
         </div>
       </div>
     </div>

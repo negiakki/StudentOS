@@ -22,6 +22,12 @@ const ACTIONS: Action[] = [
     hint: "Add subjects & update",
     icon: "✅",
   },
+  {
+    href: "/assignments",
+    label: "Assignments",
+    hint: "Track coursework by due date",
+    icon: "📝",
+  },
 ];
 
 export function QuickActions() {
