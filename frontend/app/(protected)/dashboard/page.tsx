@@ -3,14 +3,17 @@ import { AttendanceOverview } from "@/features/dashboard/AttendanceOverview";
 import { Greeting } from "@/features/dashboard/Greeting";
 import { MyTimetableCard } from "@/features/dashboard/MyTimetableCard";
 import { QuickActions } from "@/features/dashboard/QuickActions";
+import { TodoCard } from "@/features/dashboard/TodoCard";
 import { createClient } from "@/lib/supabase/server";
 import { getAssignmentDashboard } from "@/services/assignments";
 import { getAttendanceOverview } from "@/services/attendance";
 import { getTimetableFile } from "@/services/timetable";
+import { getTodosToday } from "@/services/todo";
 import { getProfile } from "@/services/user";
 import type { AssignmentDashboard } from "@/types/assignment";
 import type { AttendanceOverview as Overview } from "@/types/attendance";
 import type { TimetableFile } from "@/types/timetable";
+import type { Todo } from "@/types/todo";
 import type { UserProfile } from "@/types/user";
 
 /** Prefer the profile's name; fall back to the email local-part, then a default. */
@@ -36,19 +39,22 @@ export default async function DashboardPage() {
   let overview: Overview | null = null;
   let timetable: TimetableFile | null = null;
   let assignmentDashboard: AssignmentDashboard | null = null;
+  let todosToday: Todo[] | null = null;
 
   if (token) {
-    const [profileRes, overviewRes, timetableRes, assignmentsRes] =
+    const [profileRes, overviewRes, timetableRes, assignmentsRes, todosRes] =
       await Promise.allSettled([
         getProfile(token),
         getAttendanceOverview(token),
         getTimetableFile(token),
         getAssignmentDashboard(token),
+        getTodosToday(token),
       ]);
     if (profileRes.status === "fulfilled") profile = profileRes.value;
     if (overviewRes.status === "fulfilled") overview = overviewRes.value;
     if (timetableRes.status === "fulfilled") timetable = timetableRes.value.file;
     if (assignmentsRes.status === "fulfilled") assignmentDashboard = assignmentsRes.value;
+    if (todosRes.status === "fulfilled") todosToday = todosRes.value;
   }
 
   const name = firstName(profile, userData.user?.email);
@@ -65,6 +71,7 @@ export default async function DashboardPage() {
         <div className="space-y-6">
           <QuickActions />
           <AssignmentsCard dashboard={assignmentDashboard} />
+          <TodoCard todos={todosToday} />
         </div>
       </div>
     </div>

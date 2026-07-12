@@ -28,6 +28,12 @@ const ACTIONS: Action[] = [
     hint: "Track coursework by due date",
     icon: "📝",
   },
+  {
+    href: "/todo",
+    label: "Todo",
+    hint: "Manage your checklist tasks",
+    icon: "✔️",
+  },
 ];
 
 export function QuickActions() {

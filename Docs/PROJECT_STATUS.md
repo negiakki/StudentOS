@@ -29,14 +29,15 @@ Primary MVP:
 
 # Current Phase
 
-🟢 Phase 8 — Todo
+🟢 Phase 9 — Coco
 
 Status: ⬜ Not Started (next up)
 
-Phase 7 (Assignments) is complete. It added full CRUD for assignments
-(title, description, optional subject link, due date, priority), a dashboard
-grouping into Overdue / Due Today / Upcoming computed in Python, and dashboard
-integration replacing the Phase 5 "Recent Tasks" placeholder.
+Phase 8 (Todo) is complete. It added full CRUD for todos (title, optional due
+date, completion toggle), a dashboard `TodoCard`, and a new Quick Actions tile
+linking to `/todo`. Alongside it, a reusable `DatePicker` component was built
+as a UX enhancement and adopted by both Assignments and Todo, with no
+backend/API contract changes.
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -347,14 +348,35 @@ Todo
 
 Status
 
-🟢 Current phase — Not Started
+✅ Complete — implementation review, pre-merge review, manual testing, and
+repository integrity verification all passed
 
-Tasks
+Backend
 
-* Create Task
-* Complete Task
-* Delete Task
-* Dashboard Integration
+* ✅ Todo repository — plain `UserScopedRepository`, no custom queries
+* ✅ Todo service — create/list/complete/delete logic, every query scoped to
+  the authenticated user
+* ✅ Todo schemas — request/response models for the API layer
+* ✅ Todo API — `POST/GET/PATCH/DELETE /todos`
+* ✅ Router registration — Todo routes wired into `main.py`
+
+Frontend
+
+* ✅ Todo page — protected `/todo` route
+* ✅ TodoManager — add/complete/delete UI, using the shared `DatePicker` for
+  due dates
+* ✅ Dashboard TodoCard — surfaces todos on the dashboard
+* ✅ Quick Actions integration — new tile linking to `/todo`
+* ✅ API service — `services/todo.ts`
+* ✅ Types — `types/todo.ts`
+
+Verification
+
+* ✅ CRUD verified — create, complete, delete exercised end-to-end
+* ✅ Dashboard integration verified — `TodoCard` renders live data
+* ✅ TypeScript — typecheck clean
+* ✅ Production build — `next build` clean
+* ✅ Manual testing — click-through completed during review
 
 ---
 
@@ -364,7 +386,7 @@ Coco
 
 Status
 
-⬜ Not Started
+🟢 Current Phase — Not Started
 
 Tasks
 
@@ -527,3 +549,12 @@ Version 1.0
   dashboard `AssignmentsCard` that replaces the Phase 5 "Recent Tasks"
   placeholder, plus a new Quick Actions tile. Backend imports and frontend
   typecheck/lint/build verified clean.
+* Phase 8 (Todo) implemented: full CRUD (`POST/GET/PATCH/DELETE /todos`) via a
+  new `TodoRepository`/`TodoService`/schemas, registered in `main.py`.
+  Frontend: `/todo` page with `TodoManager` (add/complete/delete), a dashboard
+  `TodoCard`, and a new Quick Actions tile. Alongside it, a reusable
+  `DatePicker` component was built and adopted by both Assignments and Todo
+  for due-date selection, with no backend/API contract changes. Verified: CRUD
+  end-to-end, dashboard integration, typecheck/lint/prod build clean, and
+  manual click-through testing. Passed implementation review, pre-merge
+  review, manual testing, and repository integrity verification.

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Assignments management (Phase 7). Add coursework with an optional subject,
- * due date, and priority; edit or delete it; toggle it complete/pending. Mirrors
- * the Attendance module's add-form + inline-edit-row structure.
+ * Todo management (Phase 8). Add a checklist task with an optional due date
+ * and priority; edit or delete it; toggle it complete/incomplete. Mirrors the
+ * Assignments module's add-form + inline-edit-row structure.
  */
 
 import { useMemo, useState } from "react";
@@ -13,17 +13,8 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { ApiError } from "@/lib/api";
 import { fromISODate, todayISODate } from "@/lib/date";
 import { createClient } from "@/lib/supabase/client";
-import {
-  createAssignment,
-  deleteAssignment,
-  updateAssignment,
-} from "@/services/assignments";
-import type {
-  Assignment,
-  AssignmentStatus,
-  Priority,
-} from "@/types/assignment";
-import type { SubjectAttendance } from "@/types/attendance";
+import { createTodo, deleteTodo, updateTodo } from "@/services/todo";
+import type { Priority, Todo } from "@/types/todo";
 
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH"];
 
@@ -58,7 +49,7 @@ function formatDueDate(iso: string): string {
   });
 }
 
-function sortAssignments(items: Assignment[]): Assignment[] {
+function sortTodos(items: Todo[]): Todo[] {
   return [...items].sort((a, b) => {
     if (!a.due_date && !b.due_date) return a.title.localeCompare(b.title);
     if (!a.due_date) return 1;
@@ -67,67 +58,46 @@ function sortAssignments(items: Assignment[]): Assignment[] {
   });
 }
 
-export function AssignmentsManager({
-  initialAssignments,
-  subjects,
-}: {
-  initialAssignments: Assignment[];
-  subjects: SubjectAttendance[];
-}) {
-  const [assignments, setAssignments] = useState(initialAssignments);
+export function TodoManager({ initialTodos }: { initialTodos: Todo[] }) {
+  const [todos, setTodos] = useState(initialTodos);
   const [error, setError] = useState<string | null>(null);
 
-  const subjectName = useMemo(() => {
-    const map = new Map(subjects.map((s) => [s.id, s.name]));
-    return (id: string | null) => (id ? map.get(id) ?? null : null);
-  }, [subjects]);
-
   const pending = useMemo(
-    () => sortAssignments(assignments.filter((a) => a.status === "PENDING")),
-    [assignments],
+    () => sortTodos(todos.filter((t) => !t.completed)),
+    [todos],
   );
   const completed = useMemo(
-    () => sortAssignments(assignments.filter((a) => a.status === "COMPLETED")),
-    [assignments],
+    () => sortTodos(todos.filter((t) => t.completed)),
+    [todos],
   );
 
-  function replace(updated: Assignment) {
-    setAssignments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  function replace(updated: Todo) {
+    setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
   }
 
   async function handleAdd(payload: {
     title: string;
-    description: string;
-    subjectId: string;
     dueDate: string;
     priority: Priority;
   }) {
     setError(null);
     const token = await getAccessToken();
-    const created = await createAssignment(
+    const created = await createTodo(
       {
         title: payload.title,
-        description: payload.description || null,
-        subject_id: payload.subjectId || null,
         due_date: payload.dueDate || null,
         priority: payload.priority,
       },
       token,
     );
-    setAssignments((prev) => [...prev, created]);
+    setTodos((prev) => [...prev, created]);
   }
 
-  async function handleToggleStatus(assignment: Assignment) {
+  async function handleToggleCompleted(todo: Todo) {
     setError(null);
     try {
       const token = await getAccessToken();
-      const nextStatus: AssignmentStatus =
-        assignment.status === "PENDING" ? "COMPLETED" : "PENDING";
-      const updated = await updateAssignment(
-        assignment.id,
-        { status: nextStatus },
-        token,
-      );
+      const updated = await updateTodo(todo.id, { completed: !todo.completed }, token);
       replace(updated);
     } catch (err) {
       setError(messageFor(err));
@@ -136,22 +106,14 @@ export function AssignmentsManager({
 
   async function handleSave(
     id: string,
-    payload: {
-      title: string;
-      description: string;
-      subjectId: string;
-      dueDate: string;
-      priority: Priority;
-    },
+    payload: { title: string; dueDate: string; priority: Priority },
   ) {
     setError(null);
     const token = await getAccessToken();
-    const updated = await updateAssignment(
+    const updated = await updateTodo(
       id,
       {
         title: payload.title,
-        description: payload.description || null,
-        subject_id: payload.subjectId || null,
         due_date: payload.dueDate || null,
         priority: payload.priority,
       },
@@ -164,8 +126,8 @@ export function AssignmentsManager({
     setError(null);
     try {
       const token = await getAccessToken();
-      await deleteAssignment(id, token);
-      setAssignments((prev) => prev.filter((a) => a.id !== id));
+      await deleteTodo(id, token);
+      setTodos((prev) => prev.filter((t) => t.id !== id));
     } catch (err) {
       setError(messageFor(err));
     }
@@ -179,7 +141,7 @@ export function AssignmentsManager({
         </div>
       )}
 
-      <AddAssignmentForm subjects={subjects} onAdd={handleAdd} onError={setError} />
+      <AddTodoForm onAdd={handleAdd} onError={setError} />
 
       <Card>
         <CardHeader
@@ -187,24 +149,22 @@ export function AssignmentsManager({
           subtitle={
             pending.length === 0
               ? "None yet"
-              : `${pending.length} assignment${pending.length === 1 ? "" : "s"}`
+              : `${pending.length} task${pending.length === 1 ? "" : "s"}`
           }
         />
         {pending.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">
-            No assignments yet. Add your first one above.
+            No tasks yet. Add your first one above.
           </p>
         ) : (
           <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            {pending.map((a) => (
-              <AssignmentRow
-                key={a.id}
-                assignment={a}
-                subjects={subjects}
-                subjectName={subjectName(a.subject_id)}
-                onToggleStatus={() => handleToggleStatus(a)}
+            {pending.map((t) => (
+              <TodoRow
+                key={t.id}
+                todo={t}
+                onToggleCompleted={() => handleToggleCompleted(t)}
                 onSave={handleSave}
-                onDelete={() => handleDelete(a.id)}
+                onDelete={() => handleDelete(t.id)}
                 onError={setError}
               />
             ))}
@@ -216,18 +176,16 @@ export function AssignmentsManager({
         <Card>
           <CardHeader
             title="Completed"
-            subtitle={`${completed.length} assignment${completed.length === 1 ? "" : "s"}`}
+            subtitle={`${completed.length} task${completed.length === 1 ? "" : "s"}`}
           />
           <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            {completed.map((a) => (
-              <AssignmentRow
-                key={a.id}
-                assignment={a}
-                subjects={subjects}
-                subjectName={subjectName(a.subject_id)}
-                onToggleStatus={() => handleToggleStatus(a)}
+            {completed.map((t) => (
+              <TodoRow
+                key={t.id}
+                todo={t}
+                onToggleCompleted={() => handleToggleCompleted(t)}
                 onSave={handleSave}
-                onDelete={() => handleDelete(a.id)}
+                onDelete={() => handleDelete(t.id)}
                 onError={setError}
               />
             ))}
@@ -241,24 +199,18 @@ export function AssignmentsManager({
 const inputClass =
   "rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500";
 
-function AddAssignmentForm({
-  subjects,
+function AddTodoForm({
   onAdd,
   onError,
 }: {
-  subjects: SubjectAttendance[];
   onAdd: (payload: {
     title: string;
-    description: string;
-    subjectId: string;
     dueDate: string;
     priority: Priority;
   }) => Promise<void>;
   onError: (msg: string | null) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [subjectId, setSubjectId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [saving, setSaving] = useState(false);
@@ -266,14 +218,12 @@ function AddAssignmentForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     onError(null);
-    if (!title.trim()) return onError("Enter an assignment title.");
+    if (!title.trim()) return onError("Enter a task title.");
 
     setSaving(true);
     try {
-      await onAdd({ title: title.trim(), description, subjectId, dueDate, priority });
+      await onAdd({ title: title.trim(), dueDate, priority });
       setTitle("");
-      setDescription("");
-      setSubjectId("");
       setDueDate("");
       setPriority("MEDIUM");
     } catch (err) {
@@ -285,7 +235,7 @@ function AddAssignmentForm({
 
   return (
     <Card>
-      <CardHeader title="Add an assignment" />
+      <CardHeader title="Add a task" />
       <form onSubmit={submit} className="space-y-3 p-5">
         <input
           value={title}
@@ -293,26 +243,7 @@ function AddAssignmentForm({
           placeholder="Title"
           className={inputClass}
         />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description (optional)"
-          rows={2}
-          className={`${inputClass} resize-none`}
-        />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <select
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">No subject</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <DatePicker value={dueDate} onChange={setDueDate} placeholder="Due date" />
           <select
             value={priority}
@@ -338,69 +269,46 @@ function AddAssignmentForm({
   );
 }
 
-function AssignmentRow({
-  assignment,
-  subjects,
-  subjectName,
-  onToggleStatus,
+function TodoRow({
+  todo,
+  onToggleCompleted,
   onSave,
   onDelete,
   onError,
 }: {
-  assignment: Assignment;
-  subjects: SubjectAttendance[];
-  subjectName: string | null;
-  onToggleStatus: () => Promise<void>;
+  todo: Todo;
+  onToggleCompleted: () => Promise<void>;
   onSave: (
     id: string,
-    payload: {
-      title: string;
-      description: string;
-      subjectId: string;
-      dueDate: string;
-      priority: Priority;
-    },
+    payload: { title: string; dueDate: string; priority: Priority },
   ) => Promise<void>;
   onDelete: () => void;
   onError: (msg: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(assignment.title);
-  const [description, setDescription] = useState(assignment.description ?? "");
-  const [subjectId, setSubjectId] = useState(assignment.subject_id ?? "");
-  const [dueDate, setDueDate] = useState(assignment.due_date ?? "");
-  const [priority, setPriority] = useState<Priority>(assignment.priority);
+  const [title, setTitle] = useState(todo.title);
+  const [dueDate, setDueDate] = useState(todo.due_date ?? "");
+  const [priority, setPriority] = useState<Priority>(todo.priority);
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
 
-  const isOverdue =
-    assignment.status === "PENDING" &&
-    !!assignment.due_date &&
-    assignment.due_date < todayISODate();
+  const isOverdue = !todo.completed && !!todo.due_date && todo.due_date < todayISODate();
 
   function cancel() {
-    setTitle(assignment.title);
-    setDescription(assignment.description ?? "");
-    setSubjectId(assignment.subject_id ?? "");
-    setDueDate(assignment.due_date ?? "");
-    setPriority(assignment.priority);
+    setTitle(todo.title);
+    setDueDate(todo.due_date ?? "");
+    setPriority(todo.priority);
     setEditing(false);
     onError(null);
   }
 
   async function save() {
     onError(null);
-    if (!title.trim()) return onError("Enter an assignment title.");
+    if (!title.trim()) return onError("Enter a task title.");
 
     setSaving(true);
     try {
-      await onSave(assignment.id, {
-        title: title.trim(),
-        description,
-        subjectId,
-        dueDate,
-        priority,
-      });
+      await onSave(todo.id, { title: title.trim(), dueDate, priority });
       setEditing(false);
     } catch (err) {
       onError(messageFor(err));
@@ -412,7 +320,7 @@ function AssignmentRow({
   async function toggle() {
     setToggling(true);
     try {
-      await onToggleStatus();
+      await onToggleCompleted();
     } finally {
       setToggling(false);
     }
@@ -426,25 +334,7 @@ function AssignmentRow({
           onChange={(e) => setTitle(e.target.value)}
           className={inputClass}
         />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className={`${inputClass} w-full resize-none`}
-        />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <select
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">No subject</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <DatePicker value={dueDate} onChange={setDueDate} placeholder="Due date" />
           <select
             value={priority}
@@ -485,22 +375,21 @@ function AssignmentRow({
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={`truncate text-sm font-medium text-neutral-900 dark:text-neutral-100 ${
-              assignment.status === "COMPLETED" ? "line-through opacity-60" : ""
+              todo.completed ? "line-through opacity-60" : ""
             }`}
           >
-            {assignment.title}
+            {todo.title}
           </span>
           <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[assignment.priority]}`}
+            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[todo.priority]}`}
           >
-            {assignment.priority.charAt(0) + assignment.priority.slice(1).toLowerCase()}
+            {todo.priority.charAt(0) + todo.priority.slice(1).toLowerCase()}
           </span>
         </div>
         <p className="mt-0.5 text-xs text-neutral-500">
-          {subjectName && <>{subjectName} · </>}
-          {assignment.due_date ? (
+          {todo.due_date ? (
             <span className={isOverdue ? "text-red-600 dark:text-red-400" : ""}>
-              Due {formatDueDate(assignment.due_date)}
+              Due {formatDueDate(todo.due_date)}
               {isOverdue ? " (overdue)" : ""}
             </span>
           ) : (
@@ -514,12 +403,12 @@ function AssignmentRow({
           onClick={toggle}
           disabled={toggling}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
-            assignment.status === "COMPLETED"
+            todo.completed
               ? "border border-neutral-300 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
               : "bg-emerald-600 text-white hover:bg-emerald-700"
           }`}
         >
-          {assignment.status === "COMPLETED" ? "Mark Pending" : "Mark Complete"}
+          {todo.completed ? "Mark Pending" : "Mark Complete"}
         </button>
         <button
           type="button"
