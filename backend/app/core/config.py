@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     # Default chat model on OpenRouter (used from Phase 6).
     openrouter_model: str = "openai/gpt-4o-mini"
+    # OpenRouter API base; override only for proxies or compatible gateways.
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     watsonx_api_key: str = ""
 

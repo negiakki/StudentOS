@@ -31,13 +31,23 @@ Primary MVP:
 
 🟢 Phase 9 — Coco
 
-Status: ⬜ Not Started (next up)
+Status: 🟡 In Progress — backend (Milestone 1) complete; frontend side panel next
 
 Phase 8 (Todo) is complete. It added full CRUD for todos (title, optional due
 date, completion toggle), a dashboard `TodoCard`, and a new Quick Actions tile
 linking to `/todo`. Alongside it, a reusable `DatePicker` component was built
 as a UX enhancement and adopted by both Assignments and Todo, with no
 backend/API contract changes.
+
+Phase 9 backend (Milestone 1) now landed per `Docs/06_Coco_V1_Design.md`:
+OpenRouter chat provider completed (httpx, graceful `ChatResult.failure`), the
+`POST /coco/chat` two-call flow (prompted-JSON tool selection → one validated
+tool → grounded answer), read tools over the existing attendance/assignment/
+todo/timetable services, a composed `get_daily_snapshot`, propose→confirm write
+actions (create_todo / create_assignment / complete_todo / mark_attendance) with
+server-side name→id resolution, the 6-message context window, chat persistence,
+and `GET /coco/history`. No new tables or migration (`chat_messages` predates
+this). Frontend Coco side panel remains to be built (Milestone 2).
 
 (Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 — Timetable Upload (Storage Only):
 ✅ Complete — upload → Supabase Storage → save reference → display. Instant, no
@@ -386,18 +396,43 @@ Coco
 
 Status
 
-🟢 Current Phase — Not Started
+🟡 In Progress — backend (Milestone 1) complete; frontend side panel next
 
-Tasks
+Backend (Milestone 1) — ✅ complete
 
-* Tool Layer
-* Dashboard Tool
-* Attendance Tool
-* Timetable Tool
-* Assignment Tool
-* Todo Tool
-* Weather Tool
-* AI Integration
+* ✅ OpenRouter chat provider — `OpenRouterChatProvider.complete()` implemented
+  (httpx, lazy import, non-2xx and OpenRouter 200-with-error handled, returns
+  `ChatResult.failure` never raises); `OPENROUTER_BASE_URL` added to settings/env
+* ✅ `POST /coco/chat` + `CocoService` — two-call flow (tool selection JSON at
+  temp 0.1 with one stricter retry → one Pydantic-validated tool → grounded
+  answer at temp 0.7); degrades to `coco_available: false` with the mandated
+  fallback line on any provider failure
+* ✅ Read tools (`coco_tools.py`) — `get_attendance_overview`,
+  `get_subject_attendance` (fuzzy, ambiguity-safe), `get_attendance_records`,
+  `get_assignments`, `get_todos`, `get_daily_snapshot` (composed, one call),
+  `get_timetable_status` (metadata only, honest V2 note) — thin read-only
+  adapters over existing services, compact JSON, capped with `truncated` flags
+* ✅ Write proposals — `create_todo`, `create_assignment`, `complete_todo`,
+  `mark_attendance` parsed from a `PROPOSE_ACTION` trailer, validated, and
+  resolved server-side (subject/todo name → id; ambiguous/unmatched → dropped so
+  a misparse never becomes a card). Writes execute via existing REST endpoints
+  after user confirmation — no new write paths
+* ✅ Chat persistence + 6-message context window; `ChatMessageRepository`;
+  `GET /coco/history`; router registered in `main.py`. No new migration.
+
+Frontend (Milestone 2) — ⬜ not started
+
+* Coco side panel, confirmation cards, `services/coco.ts`, `types/coco.ts`,
+  loading + unavailable-fallback states (per CLAUDE.md checklist)
+
+Verified (Milestone 1): backend byte-compiles; app imports and exposes
+`POST /coco/chat` + `GET /coco/history` (38 routes total); a 12-case SQLite
+smoke suite with a stubbed provider passes — read flow injects the correct
+TOOL_RESULT, fuzzy subject match, context-window replay + persistence ordering,
+all four write proposals with name→id resolution, malformed-JSON retry,
+provider-unavailable and call-1-failure fallbacks (nothing persisted), invalid
+tool args never executed, ambiguous references dropped, and the composed daily
+snapshot. No AI-layer regressions elsewhere; no migration.
 
 ---
 
