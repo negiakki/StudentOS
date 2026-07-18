@@ -15,6 +15,7 @@ Failures never raise to the API layer: provider trouble degrades to
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any
@@ -33,14 +34,21 @@ from app.schemas.coco import (
     ChatIn,
     ChatOut,
     CompleteTodoPayload,
-    CreateAssignmentPayload,
-    CreateTodoPayload,
     MarkAttendancePayload,
     ProposedAction,
 )
 from app.services.attendance_service import AttendanceService
+from app.services.coco_router import (
+    AiRoute,
+    DirectRoute,
+    RefuseRoute,
+    StaticRoute,
+    classify,
+)
 from app.services.coco_tools import TOOL_REGISTRY, match_subject
 from app.services.todo_service import TodoService
+
+logger = logging.getLogger("coco.router")
 
 # CLAUDE.md-mandated fallback line (Design §6; Architecture §15).
 FALLBACK_REPLY = "Coco is temporarily unavailable. Your StudentOS data is still available."
@@ -51,8 +59,6 @@ CONTEXT_WINDOW = 6
 _ACTION_MARKER = "PROPOSE_ACTION:"
 
 _ACTION_PAYLOAD_MODELS = {
-    "create_todo": CreateTodoPayload,
-    "create_assignment": CreateAssignmentPayload,
     "complete_todo": CompleteTodoPayload,
     "mark_attendance": MarkAttendancePayload,
 }
@@ -66,7 +72,7 @@ Tools:
 
 Reply with strict JSON only — no prose, no code fences:
 {{"tool": "<tool_name>", "args": {{...}}}}
-or, if no tool fits (greetings, chitchat, questions about Coco itself, or a write request like creating a todo):
+or, if no tool fits (greetings, chitchat, or questions about Coco itself):
 {{"tool": null}}
 
 Rules:
@@ -75,7 +81,7 @@ Rules:
 - attendance questions without a subject -> get_attendance_overview
 - "was I present on <day>?" -> get_attendance_records
 - class timings / next class -> get_timetable_status
-- for write requests (add/complete a todo, add an assignment, mark attendance), select the tool whose data helps fill in the details (get_todos for completing a todo, get_attendance_overview for marking attendance), or null if none helps."""
+- for write requests (complete a todo, mark attendance), select the tool whose data helps fill in the details (get_todos for completing a todo, get_attendance_overview for marking attendance), or null if none helps."""
 
 _SELECTION_RETRY = "\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON object this time."
 
@@ -91,11 +97,13 @@ Grounding rules (most important):
 - No medical or mental-health advice: brief empathy, suggest talking to someone qualified.
 - You cannot delete anything or bulk-edit — point to the relevant page.
 
-Write actions: you may propose creating a todo, creating an assignment, completing a todo, or marking attendance — only when the user asked for it. The user will see a confirmation card before anything happens. To propose one, end your reply with a single line:
-PROPOSE_ACTION: {{"type": "create_todo"|"create_assignment"|"complete_todo"|"mark_attendance", "payload": {{...}}, "summary": "<one-line description of the action>"}}
+Write actions: you may propose completing a todo or marking attendance — only when the user asked for it. The user will see a confirmation card before anything happens. To propose one, end your reply with a single line:
+PROPOSE_ACTION: {{"type": "complete_todo"|"mark_attendance", "payload": {{...}}, "summary": "<one-line description of the action>"}}
 
-Payload fields — create_todo: title, due_date? (YYYY-MM-DD), priority? (LOW|MEDIUM|HIGH). create_assignment: title, description?, subject_name?, due_date?, priority?. complete_todo: title (of the existing todo). mark_attendance: subject_name, attendance_date (YYYY-MM-DD), status (PRESENT|ABSENT).
+Payload fields — complete_todo: title (of the existing todo). mark_attendance: subject_name, attendance_date (YYYY-MM-DD), status (PRESENT|ABSENT).
 If a required field is missing or a reference is ambiguous, ask ONE follow-up question instead of proposing. Resolve relative dates ("tomorrow", "next Monday") from today's date.
+
+Creating things: you can NOT create todos or assignments — those are made with the app's own forms. If the user asks to add/create a new assignment, reply exactly: "Assignments are best created using the Add Assignment form so you can quickly fill in all the required details." If they ask to add/create a new todo, reply exactly: "Todos are best added using the Add Todo form so you can quickly fill in all the details." Do not propose an action in either case.
 
 TOOL_RESULT:
 {tool_result}"""
@@ -111,15 +119,72 @@ def _strip_fences(text: str) -> str:
 
 
 class CocoService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, router: Any | None = None) -> None:
         self.db = db
         self.messages = ChatMessageRepository(db)
-        self.router = get_chat_router()
+        # Injectable to mirror TimetableParser(vision_router=…) — lets tests
+        # supply a provider-call-counting fake without a live provider.
+        self.router = router or get_chat_router()
 
     # --- public API -----------------------------------------------------------
 
     def chat(self, *, user: User, payload: ChatIn) -> ChatOut:
         conversation_id = payload.conversation_id or uuid.uuid4()
+
+        # Deterministic front door (L0–L2): resolve without any provider call
+        # when we can. Only L3 (AiRoute) reaches the LLM two-call flow below.
+        route = classify(payload.message, lambda: self._user_subject_names(user.id))
+
+        if isinstance(route, (StaticRoute, RefuseRoute)):
+            logger.info("ROUTE=%s", route.label)
+            return self._direct_reply(user.id, conversation_id, payload.message, route.reply)
+
+        if isinstance(route, DirectRoute):
+            return self._handle_direct(user, conversation_id, payload, route)
+
+        # L3 — AI reasoning / write-intent extraction. Requires the provider.
+        return self._handle_ai(user, conversation_id, payload)
+
+    # --- L0/L1/L2: no provider call -------------------------------------------
+
+    def _handle_direct(
+        self, user: User, conversation_id: uuid.UUID, payload: ChatIn, route: DirectRoute
+    ) -> ChatOut:
+        logger.info("ROUTE=%s", route.label)
+        tool_result = self._execute_tool(user.id, route.tool_name, route.tool_args)
+        reply_text = route.formatter(tool_result)
+        return self._direct_reply(user.id, conversation_id, payload.message, reply_text)
+
+    def _direct_reply(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        user_message: str,
+        reply_text: str,
+    ) -> ChatOut:
+        """Persist the exchange and return a reply — no proposed_action, since
+        L0–L2 never write. Chat history stays intact for /coco/history."""
+        self._persist_exchange(user_id, conversation_id, user_message, reply_text)
+        return ChatOut(
+            conversation_id=conversation_id,
+            reply=reply_text,
+            proposed_action=None,
+            coco_available=True,
+        )
+
+    def _user_subject_names(self, user_id: uuid.UUID) -> list[str]:
+        """The user's tracked subject names, for the L2 finite known-subject
+        scan. Called lazily (only when an attendance intent needs it)."""
+        try:
+            return [s.name for s in AttendanceService(self.db).list_subjects(user_id=user_id)]
+        except Exception:  # a subject lookup hiccup must not break routing
+            return []
+
+    # --- L3: existing two-call LLM flow (unchanged) ---------------------------
+
+    def _handle_ai(
+        self, user: User, conversation_id: uuid.UUID, payload: ChatIn
+    ) -> ChatOut:
         if not self.router.available:
             return self._unavailable(conversation_id)
 
@@ -141,6 +206,9 @@ class CocoService:
             return self._unavailable(conversation_id)
 
         reply_text, proposed_action = self._extract_action(user.id, reply)
+        logger.info(
+            "ROUTE=%s", "AI_PROPOSE_ACTION" if proposed_action else "AI_SUMMARY"
+        )
         self._persist_exchange(
             user.id, conversation_id, payload.message, reply_text
         )
@@ -275,20 +343,6 @@ class CocoService:
     ) -> dict[str, Any] | None:
         """Turn model-supplied names into ids for the existing REST endpoints.
         Returns None when a reference doesn't resolve unambiguously."""
-        if action_type == "create_todo":
-            return parsed.model_dump(mode="json")
-
-        if action_type == "create_assignment":
-            payload = parsed.model_dump(mode="json", exclude={"subject_name"})
-            payload["subject_id"] = None
-            if parsed.subject_name:
-                subjects = AttendanceService(self.db).list_subjects(user_id=user_id)
-                matched = match_subject(subjects, parsed.subject_name)
-                # An unmatched subject shouldn't block creating the assignment —
-                # subject_id is optional on POST /assignments.
-                payload["subject_id"] = str(matched.id) if matched else None
-            return payload
-
         if action_type == "complete_todo":
             open_todos = [
                 t

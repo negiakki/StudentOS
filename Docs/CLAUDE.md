@@ -115,19 +115,6 @@ Before considering any feature complete, verify:
 
 ---
 
-## Code Quality
-
-Always:
-
-- Write production-quality code.
-- Prefer reusable components.
-- Keep functions small.
-- Avoid duplication.
-- Keep files organized.
-- Follow the documented architecture.
-
----
-
 ## Scope
 
 Never add features outside the PRD.

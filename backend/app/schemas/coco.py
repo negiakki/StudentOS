@@ -13,11 +13,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import AttendanceStatus, ChatRole, Priority
+from app.models.enums import AttendanceStatus, ChatRole
 
-ActionType = Literal[
-    "create_todo", "create_assignment", "complete_todo", "mark_attendance"
-]
+# V1 scope: Coco only proposes the two write actions where chat beats the UI
+# form. Creating todos/assignments went back to the forms (Docs/06 scope change).
+ActionType = Literal["complete_todo", "mark_attendance"]
 
 
 class ChatIn(BaseModel):
@@ -82,20 +82,6 @@ class GetTodosArgs(BaseModel):
 
 
 # --- Write-action payload models (validate a PROPOSE_ACTION) ------------------
-
-
-class CreateTodoPayload(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    due_date: date | None = None
-    priority: Priority = Priority.MEDIUM
-
-
-class CreateAssignmentPayload(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    description: str | None = None
-    subject_name: str | None = None  # resolved to subject_id server-side
-    due_date: date | None = None
-    priority: Priority = Priority.MEDIUM
 
 
 class CompleteTodoPayload(BaseModel):

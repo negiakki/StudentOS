@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/(auth)/actions";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CocoWidget } from "@/features/coco/CocoWidget";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -47,6 +48,7 @@ export default async function ProtectedLayout({
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      <CocoWidget />
     </div>
   );
 }
