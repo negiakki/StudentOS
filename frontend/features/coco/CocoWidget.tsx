@@ -9,14 +9,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { getChatHistory, sendChat } from "@/services/coco";
+import { sendChat } from "@/services/coco";
 import type { ProposedAction } from "@/types/coco";
 
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { Markdown } from "./Markdown";
 
 const ERROR_LINE = "Sorry, something went wrong. Please try again.";
-const CONVERSATION_KEY = "coco:conversation_id";
 
 type Message = {
   id: string;
@@ -43,8 +42,10 @@ export function CocoWidget() {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
 
+  // conversation_id lives only in this ref: every page load is a fresh Coco
+  // session. Nothing is persisted, so refresh / new tab / restart / re-login
+  // all start a new conversation and never restore old messages.
   const conversationIdRef = useRef<string | null>(null);
-  const historyLoadedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -63,35 +64,9 @@ export function CocoWidget() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pending, open]);
 
-  // First open: restore the stored conversation, once.
+  // Focus the input when the panel opens.
   useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
-    if (historyLoadedRef.current) return;
-    historyLoadedRef.current = true;
-
-    const stored = localStorage.getItem(CONVERSATION_KEY);
-    if (!stored) return;
-    conversationIdRef.current = stored;
-
-    (async () => {
-      try {
-        const token = await getAccessToken();
-        const history = await getChatHistory(stored, token);
-        // Prepend history before anything sent this session, skipping ids we
-        // already rendered.
-        setMessages((prev) => {
-          const seen = new Set(prev.map((m) => m.id));
-          const loaded = history.messages
-            .filter((m) => !seen.has(m.id))
-            .map((m) => ({ id: m.id, role: m.role, text: m.message }));
-          return [...loaded, ...prev];
-        });
-      } catch {
-        // History is a nicety; allow re-try on next mount and keep chatting.
-        historyLoadedRef.current = false;
-      }
-    })();
+    if (open) inputRef.current?.focus();
   }, [open]);
 
   const submit = useCallback(async () => {
@@ -108,7 +83,6 @@ export function CocoWidget() {
       const token = await getAccessToken();
       const res = await sendChat(text, conversationIdRef.current, token);
       conversationIdRef.current = res.conversation_id;
-      localStorage.setItem(CONVERSATION_KEY, res.conversation_id);
       setMessages((prev) => [
         ...prev,
         {

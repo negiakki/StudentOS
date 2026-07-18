@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import ValidationError
@@ -55,6 +55,10 @@ FALLBACK_REPLY = "Coco is temporarily unavailable. Your StudentOS data is still 
 
 # Last 6 messages (3 turns) of the current conversation — context, not memory (§5).
 CONTEXT_WINDOW = 6
+
+# Coco conversations are ephemeral on the frontend; anything older than this is
+# pruned best-effort before each chat, so old chat data never accumulates.
+RETENTION = timedelta(hours=24)
 
 _ACTION_MARKER = "PROPOSE_ACTION:"
 
@@ -129,6 +133,8 @@ class CocoService:
     # --- public API -----------------------------------------------------------
 
     def chat(self, *, user: User, payload: ChatIn) -> ChatOut:
+        self._prune_old_conversations()
+
         conversation_id = payload.conversation_id or uuid.uuid4()
 
         # Deterministic front door (L0–L2): resolve without any provider call
@@ -144,6 +150,24 @@ class CocoService:
 
         # L3 — AI reasoning / write-intent extraction. Requires the provider.
         return self._handle_ai(user, conversation_id, payload)
+
+    def _prune_old_conversations(self) -> None:
+        """Best-effort removal of conversations (and their messages) older than
+        RETENTION, run before serving a chat. No infra needed — the request that
+        creates new data also clears out the stale data.
+
+        Isolated in a SAVEPOINT so a failed delete rolls back only itself and
+        never poisons the request's transaction: cleanup must never block the
+        user (Design goal). Any error is logged and swallowed.
+        """
+        cutoff = datetime.now(timezone.utc) - RETENTION
+        try:
+            with self.db.begin_nested():
+                removed = self.messages.delete_older_than(cutoff)
+            if removed:
+                logger.info("coco cleanup: pruned %d old chat message(s)", removed)
+        except Exception:  # noqa: BLE001 — cleanup is best-effort, never fatal
+            logger.warning("coco cleanup failed; serving request anyway", exc_info=True)
 
     # --- L0/L1/L2: no provider call -------------------------------------------
 

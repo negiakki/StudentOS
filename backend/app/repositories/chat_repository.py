@@ -9,8 +9,9 @@ full history of one conversation, always scoped to the owning user.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.models.system import ChatMessage
 from app.repositories.base import UserScopedRepository
@@ -56,3 +57,16 @@ class ChatMessageRepository(UserScopedRepository[ChatMessage]):
             .limit(limit)
         )
         return list(reversed(list(newest_first)))
+
+    def delete_older_than(self, cutoff: datetime) -> int:
+        """Delete every message created before `cutoff`, all users.
+
+        A conversation is just the rows sharing a `conversation_id` (there is no
+        separate table), so pruning old messages *is* pruning old conversations.
+        The `created_at` index makes this a single range delete. Returns the
+        number of rows removed. Does not commit — the caller owns the transaction.
+        """
+        result = self.db.execute(
+            delete(ChatMessage).where(ChatMessage.created_at < cutoff)
+        )
+        return result.rowcount or 0

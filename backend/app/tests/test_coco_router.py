@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import unittest
 import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from app.ai.interfaces.chat_provider import ChatResult
@@ -46,6 +48,7 @@ class _FakeMessageRepo:
 
     def __init__(self, _db):
         self.added: list[object] = []
+        self.pruned_before: object = None
 
     def list_recent(self, *_a, **_k):
         return []
@@ -53,6 +56,18 @@ class _FakeMessageRepo:
     def add(self, obj):
         self.added.append(obj)
         return obj
+
+    def delete_older_than(self, cutoff):
+        self.pruned_before = cutoff
+        return 0
+
+
+class _FakeSession:
+    """Minimal stand-in exposing only the SAVEPOINT context the cleanup uses."""
+
+    @contextmanager
+    def begin_nested(self):
+        yield
 
 
 # Representative tool outputs, so the L2 formatters run on real-shaped data
@@ -104,7 +119,7 @@ class CocoRoutingTest(unittest.TestCase):
 
     def _chat(self, message: str, results=None):
         router = FakeRouter(results=results)
-        service = CocoService(db=object(), router=router)
+        service = CocoService(db=_FakeSession(), router=router)
         out = service.chat(user=self.user, payload=ChatIn(message=message))
         return out, router
 
@@ -243,6 +258,31 @@ class CocoRoutingTest(unittest.TestCase):
             with self.subTest(message=message):
                 _, router = self._chat(message)
                 self.assertEqual(router.calls, 0, f"{message!r} should cost 0 provider calls")
+
+    # --- ephemeral-conversation cleanup ---------------------------------------
+
+    def test_chat_prunes_conversations_older_than_24h(self):
+        """Every chat first prunes messages older than the 24h retention window,
+        with a cutoff of roughly now-24h (regardless of the route taken)."""
+        service = CocoService(db=_FakeSession(), router=FakeRouter())
+        before = datetime.now(timezone.utc)
+        service.chat(user=self.user, payload=ChatIn(message="hi"))
+        after = datetime.now(timezone.utc)
+
+        cutoff = service.messages.pruned_before
+        self.assertIsNotNone(cutoff, "cleanup should have run before serving")
+        self.assertGreaterEqual(cutoff, before - timedelta(hours=24))
+        self.assertLessEqual(cutoff, after - timedelta(hours=24))
+
+    def test_cleanup_failure_never_blocks_the_request(self):
+        """A raising cleanup is swallowed: the user still gets a normal reply."""
+        service = CocoService(db=_FakeSession(), router=FakeRouter())
+        with mock.patch.object(
+            service.messages, "delete_older_than", side_effect=RuntimeError("db down")
+        ):
+            out = service.chat(user=self.user, payload=ChatIn(message="hi"))
+        self.assertTrue(out.coco_available)
+        self.assertTrue(out.reply)
 
 
 if __name__ == "__main__":
